@@ -1177,8 +1177,8 @@ export default function BuilderPage() {
         isOpen={isNewWorkflowDialogOpen}
         onClose={() => {
           setIsNewWorkflowDialogOpen(false)
-          if (!templateLoaded) {
-            // If user cancels without creating a workflow, redirect to home
+          // Only redirect to home if the user explicitly cancels and no workflow is loaded
+          if (!templateLoaded && !nodes.length) {
             window.location.href = "/"
           }
         }}

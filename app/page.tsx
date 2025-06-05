@@ -187,6 +187,10 @@ export default function Home() {
             </Link>
           </nav>
           <div className="flex items-center gap-4">
+            <Button variant="outline" size="sm" className="gap-2" onClick={handleImportWorkflow}>
+              <Upload className="h-4 w-4" />
+              <span className="hidden sm:inline">Import</span>
+            </Button>
             <Link href="/builder?new=true">
               <Button size="sm">
                 New Workflow
