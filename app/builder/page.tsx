@@ -437,6 +437,7 @@ export default function BuilderPage() {
     setEdges([])
     setWorkflowName(name)
     setTemplateLoaded(true)
+    setIsNewWorkflowDialogOpen(false)
     toast({
       title: "Workflow created",
       description: `Created new workflow: ${name}`,
@@ -1175,10 +1176,10 @@ export default function BuilderPage() {
       </div>
       <NewWorkflowDialog
         isOpen={isNewWorkflowDialogOpen}
-        onClose={() => {
+        onClose={(e) => {
           setIsNewWorkflowDialogOpen(false)
-          // Only redirect to home if the user explicitly cancels and no workflow is loaded
-          if (!templateLoaded && !nodes.length) {
+          // Only redirect to home if explicitly cancelled and no workflow exists
+          if (!templateLoaded && !nodes.length && e?.type === 'click') {
             window.location.href = "/"
           }
         }}

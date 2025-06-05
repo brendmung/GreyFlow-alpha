@@ -14,7 +14,7 @@ import {
 
 interface NewWorkflowDialogProps {
   isOpen: boolean;
-  onClose: () => void;
+  onClose: (e?: React.MouseEvent | React.KeyboardEvent) => void;
   onConfirm: (name: string) => void;
 }
 
@@ -27,7 +27,7 @@ export function NewWorkflowDialog({ isOpen, onClose, onConfirm }: NewWorkflowDia
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={() => onClose()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Create New Workflow</DialogTitle>
@@ -45,7 +45,7 @@ export function NewWorkflowDialog({ isOpen, onClose, onConfirm }: NewWorkflowDia
           />
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={(e) => onClose(e)}>
             Cancel
           </Button>
           <Button onClick={handleConfirm}>
