@@ -81,11 +81,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - UI components from [shadcn/ui](https://ui.shadcn.com/)
 - Styling with [Tailwind CSS](https://tailwindcss.com/)
 
-## 📞 Contact
-
-- GitHub: [@brendmung](https://github.com/brendmung)
-- Project Link: [https://github.com/brendmung/GreyFlow-alpha](https://github.com/brendmung/GreyFlow-alpha)
-
 ---
 
-<p align="center">Made with ❤️ by the GreyFlow Team</p>
+<p align="center">GreyFlow Free</p>
