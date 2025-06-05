@@ -1,0 +1,69 @@
+import { memo } from "react"
+import { Handle, Position } from "reactflow"
+import { Globe, Loader2, Settings } from "lucide-react"
+
+export const APINode = memo(({ data, isConnectable }) => {
+  const isExecuting = data.isExecuting
+  const isCompleted = data.isCompleted
+  const hasError = data.hasError
+
+  return (
+    <div
+      className={`px-4 py-2 shadow-md rounded-md bg-white border-2 w-48 transition-all duration-300 ${
+        hasError
+          ? "border-red-500 bg-red-50"
+          : isExecuting
+            ? "border-orange-600 bg-orange-50 shadow-lg animate-pulse"
+            : isCompleted
+              ? "border-green-500 bg-green-50"
+              : "border-orange-500"
+      }`}
+    >
+      <div className="flex items-center">
+        <div
+          className={`rounded-full w-8 h-8 flex items-center justify-center transition-colors ${
+            hasError ? "bg-red-100" : isExecuting ? "bg-orange-200" : isCompleted ? "bg-green-100" : "bg-orange-100"
+          }`}
+        >
+          {isExecuting ? (
+            <Loader2 className="w-4 h-4 text-orange-600 animate-spin" />
+          ) : (
+            <Globe
+              className={`w-4 h-4 ${hasError ? "text-red-500" : isCompleted ? "text-green-500" : "text-orange-500"}`}
+            />
+          )}
+        </div>
+        <div className="ml-2">
+          <div className="text-sm font-bold">{data.label}</div>
+          <div className="text-xs text-gray-500">API Call</div>
+        </div>
+      </div>
+      {data.apiEndpoint && (
+        <div className="mt-1 flex items-center">
+          <Settings className="w-3 h-3 text-gray-400 mr-1" />
+          <div className="text-xs text-gray-400 truncate">{new URL(data.apiEndpoint).hostname}</div>
+        </div>
+      )}
+      <Handle
+        type="target"
+        position={Position.Top}
+        id="in"
+        isConnectable={isConnectable}
+        className={`w-3 h-3 transition-colors ${
+          hasError ? "bg-red-500" : isExecuting ? "bg-orange-600" : isCompleted ? "bg-green-500" : "bg-orange-500"
+        }`}
+      />
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        id="out"
+        isConnectable={isConnectable}
+        className={`w-3 h-3 transition-colors ${
+          hasError ? "bg-red-500" : isExecuting ? "bg-orange-600" : isCompleted ? "bg-green-500" : "bg-orange-500"
+        }`}
+      />
+    </div>
+  )
+})
+
+APINode.displayName = "APINode"
