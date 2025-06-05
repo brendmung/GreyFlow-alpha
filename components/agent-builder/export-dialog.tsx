@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -21,6 +21,10 @@ interface ExportDialogProps {
 
 export function ExportDialog({ isOpen, onClose, onExport, defaultName }: ExportDialogProps) {
   const [workflowName, setWorkflowName] = useState(defaultName)
+
+  useEffect(() => {
+    setWorkflowName(defaultName)
+  }, [defaultName])
 
   const handleExport = () => {
     onExport(workflowName)
