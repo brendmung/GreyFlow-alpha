@@ -116,32 +116,32 @@ export default function Home() {
 
   const workflowTemplates = [
     {
+      name: "CV/Resume Builder",
+      description:
+        "Create a professional CV/Resume with intelligent information gathering. The system will guide you through providing necessary details and generate a polished PDF document.",
+      icon: "📄",
+      template: "cv",
+    },
+    {
       name: "Weather Assistant",
       description:
-        "Analyze location queries and provide weather insights with personalized recommendations for activities and clothing based on current conditions.",
+        "Get personalized weather insights and recommendations based on location. Includes practical advice for activities and clothing.",
       icon: "🌤️",
       template: "weather",
     },
     {
       name: "Research & Humanize",
       description:
-        "Transform complex research topics into well-structured, natural-sounding academic papers that maintain scholarly standards while reading authentically.",
+        "Transform complex topics into well-researched, human-friendly content while maintaining academic quality and depth.",
       icon: "📚",
       template: "research",
     },
     {
       name: "Content Creator",
       description:
-        "Generate structured, engaging content with clear organization and professional polish. Ideal for articles, blog posts, and documentation.",
+        "Generate engaging content with AI assistance. Perfect for blog posts, articles, and creative writing.",
       icon: "✍️",
       template: "content",
-    },
-    {
-      name: "Data Analyzer",
-      description:
-        "Process and analyze data from various sources, identifying patterns and generating insights with clear explanations.",
-      icon: "📊",
-      template: "data",
     },
   ]
 

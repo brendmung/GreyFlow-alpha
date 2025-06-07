@@ -27,6 +27,7 @@ import { InputNode } from "@/components/agent-nodes/input-node"
 import { ProcessorNode } from "@/components/agent-nodes/processor-node"
 import { OutputNode } from "@/components/agent-nodes/output-node"
 import { APINode } from "@/components/agent-nodes/api-node"
+import { PDFNode } from "@/components/agent-nodes/pdf-node"
 import { LeftPanel } from "@/components/agent-builder/left-panel"
 import { RightPanel } from "@/components/agent-builder/right-panel"
 import Link from "next/link"
@@ -36,6 +37,7 @@ import type { APIRequestConfig } from "@/lib/api-handler"
 import { ExportDialog } from "@/components/agent-builder/export-dialog"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { NewWorkflowDialog } from "@/components/agent-builder/new-workflow-dialog"
+import { Textarea } from "@/components/ui/textarea"
 
 type HTTPMethod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH"
 type AuthType = "none" | "bearer" | "apikey" | "basic"
@@ -45,7 +47,12 @@ interface AgentNodeData {
   systemPrompt?: string
   apiEndpoint?: string
   model?: string
+  prompt?: string
   apiConfig?: APIRequestConfig
+  pdfConfig?: {
+    filename?: string
+    documentType?: "general" | "cv" | "research" | "report" | "letter" | "custom"
+  }
   isExecuting?: boolean
   isCompleted?: boolean
   hasError?: boolean
@@ -65,9 +72,104 @@ const nodeTypes: NodeTypes = {
   processor: ProcessorNode,
   output: OutputNode,
   api: APINode,
+  pdf: PDFNode,
 }
 
 const templates: Record<string, Template> = {
+  cv: {
+    name: "CV/Resume Builder",
+    nodes: [
+      {
+        id: "input-1",
+        type: "input",
+        position: { x: 100, y: 150 },
+        data: {
+          label: "User Information",
+          isExecuting: false,
+          isCompleted: false,
+          hasError: false,
+        },
+      },
+      {
+        id: "processor-1",
+        type: "processor",
+        position: { x: 300, y: 150 },
+        data: {
+          label: "Information Analyzer",
+          systemPrompt: `You are a CV/Resume information analyzer. Your task is to:
+1. Analyze the provided information
+2. Identify missing key details (e.g., contact info, education, experience, skills)
+3. If information is missing, ask specific questions to gather it
+4. Return either:
+   - A request for specific missing information, or
+   - The complete structured CV data if all necessary information is available
+
+Required sections:
+- Personal Info (name, contact, location)
+- Professional Summary
+- Work Experience
+- Education
+- Skills
+- Optional: Certifications, Projects, Languages
+
+Format missing info requests as: "MISSING_INFO: [list of specific questions]"
+Format complete data as: "COMPLETE: [structured CV data]"`,
+          model: "gpt-4o",
+          isExecuting: false,
+          isCompleted: false,
+          hasError: false,
+        },
+      },
+      {
+        id: "processor-2",
+        type: "processor",
+        position: { x: 500, y: 150 },
+        data: {
+          label: "CV Formatter",
+          systemPrompt: `You are a professional CV/Resume formatter. Your task is to:
+1. Take the structured CV data
+2. Format it into a professional, well-organized CV
+3. Use clear section headings and proper spacing
+4. Highlight key achievements and skills
+5. Ensure all dates and details are properly formatted
+6. Create a clean, professional layout suitable for PDF conversion
+
+Focus on:
+- Professional presentation
+- Clear hierarchy of information
+- Consistent formatting
+- Highlighting key achievements
+- Modern, clean design
+
+Return the formatted CV content ready for PDF conversion.`,
+          model: "gpt-4o",
+          isExecuting: false,
+          isCompleted: false,
+          hasError: false,
+        },
+      },
+      {
+        id: "pdf-1",
+        type: "pdf",
+        position: { x: 700, y: 150 },
+        data: {
+          label: "PDF Generator",
+          pdfConfig: {
+            documentType: "cv",
+            filename: "professional_cv.pdf"
+          },
+          isExecuting: false,
+          isCompleted: false,
+          hasError: false,
+        },
+      }
+    ],
+    edges: [
+      { id: "e1-2", source: "input-1", target: "processor-1", animated: true },
+      { id: "e2-3", source: "processor-1", target: "processor-2", animated: true },
+      { id: "e3-4", source: "processor-2", target: "pdf-1", animated: true },
+    ],
+  },
   weather: {
     name: "Weather Assistant",
     nodes: [
@@ -288,68 +390,6 @@ const templates: Record<string, Template> = {
       { id: "e3-4", source: "processor-1", target: "output-1", animated: true },
     ],
   },
-  data: {
-    name: "Geographic Data Analyzer",
-    nodes: [
-      {
-        id: "input-1",
-        type: "input",
-        position: { x: 50, y: 200 },
-        data: {
-          label: "Country Query",
-          isExecuting: false,
-          isCompleted: false,
-          hasError: false,
-        },
-      },
-      {
-        id: "api-1",
-        type: "api",
-        position: { x: 200, y: 150 },
-        data: {
-          label: "Countries API",
-          apiEndpoint: "https://restcountries.com/v3.1/name/{{input}}",
-          apiConfig: {
-            method: "GET",
-            authType: "none",
-          },
-          isExecuting: false,
-          isCompleted: false,
-          hasError: false,
-        },
-      },
-      {
-        id: "processor-1",
-        type: "processor",
-        position: { x: 400, y: 200 },
-        data: {
-          label: "Data Analyst",
-          systemPrompt:
-            "Analyze country information and create insights about demographics, economy, and interesting facts. Provide actionable insights and comparisons.",
-          model: "gpt-4o",
-          isExecuting: false,
-          isCompleted: false,
-          hasError: false,
-        },
-      },
-      {
-        id: "output-1",
-        type: "output",
-        position: { x: 600, y: 200 },
-        data: {
-          label: "Analysis Report",
-          isExecuting: false,
-          isCompleted: false,
-          hasError: false,
-        },
-      },
-    ],
-    edges: [
-      { id: "e1-2", source: "input-1", target: "api-1", animated: true },
-      { id: "e2-3", source: "api-1", target: "processor-1", animated: true },
-      { id: "e3-4", source: "processor-1", target: "output-1", animated: true },
-    ],
-  },
 }
 
 const getTemplateWorkflow = (templateName: string): Template | null => {
@@ -382,6 +422,13 @@ export default function BuilderPage() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [isUnsavedDialogOpen, setIsUnsavedDialogOpen] = useState(false)
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
+  const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false)
+  const [infoRequest, setInfoRequest] = useState("")
+  const [infoResolver, setInfoResolver] = useState<((value: string) => void) | null>(null)
+  const [isInputDialogOpen, setIsInputDialogOpen] = useState(false)
+  const [inputPrompt, setInputPrompt] = useState("")
+  const [inputResolver, setInputResolver] = useState<((value: string) => void) | null>(null)
+  const [currentInput, setCurrentInput] = useState("")
 
   // Track changes
   useEffect(() => {
@@ -779,15 +826,6 @@ export default function BuilderPage() {
       return
     }
 
-    if (!userInput.trim()) {
-      toast({
-        title: "No input provided",
-        description: "Please enter some input to test your workflow.",
-        variant: "destructive",
-      })
-      return
-    }
-
     try {
       setIsRunning(true)
       setOutput("")
@@ -800,6 +838,8 @@ export default function BuilderPage() {
           apiEndpoint: node.data.apiEndpoint,
           model: node.data.model,
           label: node.data.label,
+          prompt: node.data.prompt,
+          pdfConfig: node.data.pdfConfig,
           apiConfig: node.data.apiConfig ? {
             ...node.data.apiConfig,
             method: (node.data.apiConfig.method || 'GET') as HTTPMethod,
@@ -812,9 +852,25 @@ export default function BuilderPage() {
         }))
       }
 
+      const handleNeedInput = async (prompt: string): Promise<string> => {
+        return new Promise((resolve) => {
+          setInputPrompt(prompt)
+          setInputResolver(() => resolve)
+          setIsInputDialogOpen(true)
+        })
+      }
+
+      const handleNeedMoreInfo = async (request: string): Promise<string> => {
+        return new Promise((resolve) => {
+          setInfoRequest(request)
+          setInfoResolver(() => resolve)
+          setIsInfoDialogOpen(true)
+        })
+      }
+
       const result = await executeWorkflow(
         workflowData,
-        userInput,
+        "", // Start with empty input, let input agents request it
         (step: string) => {
           setOutput(prev => prev + step + "\n")
         },
@@ -834,21 +890,40 @@ export default function BuilderPage() {
                 : n
             )
           )
-        }
+        },
+        handleNeedMoreInfo,
+        handleNeedInput
       )
       
       setOutput(prev => prev + "\nFinal Result: " + result)
     } catch (error) {
-      console.error('Workflow execution failed:', error)
+      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred"
       toast({
-        title: "Execution failed",
-        description: error instanceof Error ? error.message : "Unknown error occurred",
+        title: "Workflow execution failed",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {
       setIsRunning(false)
     }
-  }, [nodes, edges, userInput, toast, setNodes])
+  }, [nodes, edges, setNodes, toast])
+
+  const handleInfoSubmit = useCallback((additionalInfo: string) => {
+    if (infoResolver) {
+      infoResolver(additionalInfo)
+      setInfoResolver(null)
+      setIsInfoDialogOpen(false)
+    }
+  }, [infoResolver])
+
+  const handleInputSubmit = useCallback((input: string) => {
+    if (inputResolver) {
+      inputResolver(input)
+      setInputResolver(null)
+      setIsInputDialogOpen(false)
+      setCurrentInput("")
+    }
+  }, [inputResolver])
 
   const handleLeftResize = useCallback(
     (e: React.MouseEvent) => {
@@ -1234,6 +1309,53 @@ export default function BuilderPage() {
         onExport={exportWorkflow}
         defaultName={workflowName}
       />
+      <Dialog open={isInfoDialogOpen} onOpenChange={(open) => !open && setIsInfoDialogOpen(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Additional Information Needed</DialogTitle>
+            <DialogDescription>
+              {infoRequest}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Textarea
+              id="additional-info"
+              placeholder="Enter the requested information..."
+              className="min-h-[100px]"
+              onChange={(e) => setUserInput(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button onClick={() => handleInfoSubmit(userInput)}>
+              Submit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={isInputDialogOpen} onOpenChange={(open) => !open && setIsInputDialogOpen(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Input Needed</DialogTitle>
+            <DialogDescription>
+              {inputPrompt}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Textarea
+              id="workflow-input"
+              placeholder="Enter your input..."
+              className="min-h-[100px]"
+              value={currentInput}
+              onChange={(e) => setCurrentInput(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button onClick={() => handleInputSubmit(currentInput)}>
+              Submit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
