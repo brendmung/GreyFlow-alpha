@@ -1,4 +1,61 @@
 import { callCustomAPI, type APIRequestConfig } from "./api-handler"
+import jsPDF from "jspdf"
+
+// Helper function to trigger file download
+function downloadPDF(pdf: jsPDF, filename: string) {
+  pdf.save(filename)
+}
+
+interface PDFStyle {
+  fontSize: number
+  lineHeight: number
+  margins: {
+    top: number
+    right: number
+    bottom: number
+    left: number
+  }
+  headerStyle?: {
+    fontSize: number
+    bold: boolean
+    spacing: number
+  }
+  subheaderStyle?: {
+    fontSize: number
+    bold: boolean
+    spacing: number
+  }
+  paragraphStyle?: {
+    indent: number
+    spacing: number
+  }
+  listStyle?: {
+    indent: number
+    bulletPoint: string
+    spacing: number
+  }
+  highlightStyle?: {
+    color: string
+    backgroundColor?: string
+  }
+}
+
+interface DocumentSection {
+  type: 'title' | 'heading' | 'subheading' | 'paragraph' | 'list' | 'quote' | 'code'
+  content: string
+  level?: number
+  items?: string[]
+}
+
+interface FormattedDocument {
+  sections: DocumentSection[]
+  metadata: {
+    title?: string
+    author?: string
+    date?: string
+    documentType: string
+  }
+}
 
 export interface Agent {
   id: string
@@ -9,6 +66,22 @@ export interface Agent {
   label?: string
   // API-specific fields
   apiConfig?: APIRequestConfig
+  // PDF-specific fields
+  pdfConfig?: {
+    format?: string
+    orientation?: string
+    fontSize?: number
+    lineHeight?: number
+    margins?: {
+      top: number
+      right: number
+      bottom: number
+      left: number
+    }
+    filename?: string
+    documentType?: "general" | "cv" | "research" | "report" | "letter" | "custom"
+    styleOverrides?: Partial<PDFStyle>
+  }
 }
 
 export interface AgentNode extends Agent {
@@ -19,6 +92,14 @@ export interface AgentNode extends Agent {
 export interface AgentGraph {
   nodes: AgentNode[]
   edges: { source: string; target: string }[]
+}
+
+export interface AgentResponse {
+  content: string
+  needsMoreInfo?: boolean
+  infoRequest?: string
+  needsInput?: boolean
+  inputPrompt?: string
 }
 
 export async function callAI(endpoint: string, messages: any[], systemPrompt?: string, model?: string) {
@@ -124,12 +205,204 @@ export async function callAI(endpoint: string, messages: any[], systemPrompt?: s
   }
 }
 
-export async function executeAgent(agent: Agent, input: string, onStep?: (step: string) => void) {
+// Helper function to clean and parse JSON from AI response
+function cleanAndParseJSON(response: string): any {
+  // Remove markdown code blocks if present
+  let cleanResponse = response.replace(/```json\n?/g, '').replace(/```\n?/g, '')
+  
+  // Remove any leading/trailing whitespace
+  cleanResponse = cleanResponse.trim()
+  
+  try {
+    return JSON.parse(cleanResponse)
+  } catch (error) {
+    console.error("Error parsing JSON:", error)
+    throw new Error("Failed to parse AI response as JSON")
+  }
+}
+
+async function analyzeContentAndGenerateStyle(content: string, documentType: string): Promise<PDFStyle> {
+  // AI prompt to analyze content and determine optimal styling
+  const analysisPrompt = `Analyze this content and provide PDF styling parameters. Return ONLY a JSON object with no additional text or formatting.
+
+Content type: ${documentType}
+Content preview: ${content.substring(0, 500)}...
+
+Required JSON structure:
+{
+  "fontSize": number,
+  "lineHeight": number,
+  "margins": {
+    "top": number,
+    "right": number,
+    "bottom": number,
+    "left": number
+  },
+  "headerStyle": {
+    "fontSize": number,
+    "bold": boolean,
+    "spacing": number
+  },
+  "subheaderStyle": {
+    "fontSize": number,
+    "bold": boolean,
+    "spacing": number
+  },
+  "paragraphStyle": {
+    "indent": number,
+    "spacing": number
+  },
+  "listStyle": {
+    "indent": number,
+    "bulletPoint": string,
+    "spacing": number
+  }
+}`
+
+  try {
+    const result = await callAI(
+      "https://grey-api.vercel.app/api/chat",
+      [{ role: "user", content: analysisPrompt }],
+      "You are a document formatter. Respond ONLY with a JSON object. No markdown, no explanations.",
+      "gpt-4o"
+    )
+
+    // Parse the AI response into a PDFStyle object
+    const styleParams = cleanAndParseJSON(result)
+    return {
+      fontSize: styleParams.fontSize || 12,
+      lineHeight: styleParams.lineHeight || 1.2,
+      margins: styleParams.margins || { top: 20, right: 20, bottom: 20, left: 20 },
+      headerStyle: styleParams.headerStyle,
+      subheaderStyle: styleParams.subheaderStyle,
+      paragraphStyle: styleParams.paragraphStyle,
+      listStyle: styleParams.listStyle,
+      highlightStyle: styleParams.highlightStyle
+    }
+  } catch (error) {
+    console.error("Error generating style:", error)
+    // Return default style if AI analysis fails
+    return {
+      fontSize: 12,
+      lineHeight: 1.2,
+      margins: { top: 20, right: 20, bottom: 20, left: 20 }
+    }
+  }
+}
+
+async function formatContentWithAI(content: string, documentType: string): Promise<FormattedDocument> {
+  const formattingPrompt = `Format this content for a professional ${documentType} PDF. 
+Return a JSON object with properly structured content.
+
+Raw content: ${content}
+
+Format rules:
+1. Use # for main title
+2. Use ## for section headings
+3. Use ### for subsection headings
+4. Use - for list items
+5. Use > for quotes
+6. Use \`\`\` for code blocks
+7. Use blank lines between sections
+8. Preserve important whitespace
+
+Return format:
+{
+  "sections": [
+    {
+      "type": "title|heading|subheading|paragraph|list|quote|code",
+      "content": "text content",
+      "level": number (for headings),
+      "items": ["list items"] (for lists)
+    }
+  ],
+  "metadata": {
+    "title": "document title",
+    "author": "extracted or generated",
+    "date": "current date",
+    "documentType": "${documentType}"
+  }
+}`
+
+  try {
+    const result = await callAI(
+      "https://grey-api.vercel.app/api/chat",
+      [{ role: "user", content: formattingPrompt }],
+      "You are a professional document formatter. Return only valid JSON with the formatted content structure.",
+      "gpt-4o"
+    )
+
+    const formatted = cleanAndParseJSON(result)
+    return formatted
+  } catch (error) {
+    console.error("Error formatting content:", error)
+    return {
+      sections: [{ type: 'paragraph', content }],
+      metadata: { documentType }
+    }
+  }
+}
+
+function getDefaultStyleForType(documentType: string) {
+  const baseStyle = {
+    format: 'a4',
+    orientation: 'portrait',
+    defaultFontSize: 11,
+    titleFontSize: 20,
+    headingFontSize: 14,
+    subheadingFontSize: 12,
+    lineHeight: 1.2,
+    margins: { top: 20, right: 15, bottom: 20, left: 15 }
+  }
+
+  switch (documentType) {
+    case 'cv':
+      return {
+        ...baseStyle,
+        defaultFontSize: 10,
+        titleFontSize: 16,
+        headingFontSize: 12,
+        subheadingFontSize: 11,
+        lineHeight: 1.15,
+        margins: { top: 12, right: 12, bottom: 12, left: 12 }
+      }
+    case 'research':
+      return {
+        ...baseStyle,
+        defaultFontSize: 11,
+        titleFontSize: 18,
+        lineHeight: 1.4,
+        margins: { top: 25, right: 20, bottom: 25, left: 20 }
+      }
+    case 'letter':
+      return {
+        ...baseStyle,
+        defaultFontSize: 11,
+        titleFontSize: 14,
+        lineHeight: 1.15,
+        margins: { top: 30, right: 30, bottom: 30, left: 30 }
+      }
+    default:
+      return baseStyle
+  }
+}
+
+export async function executeAgent(agent: Agent, input: string, onStep?: (step: string) => void): Promise<AgentResponse> {
   onStep?.(`🔄 Executing ${agent.type} agent: ${agent.label || agent.id}`)
 
   if (agent.type === "input") {
+    // If there's no input, request it through dialog
+    if (!input.trim()) {
+      onStep?.(`❓ Input agent requesting user input`)
+      return {
+        content: "",
+        needsInput: true,
+        inputPrompt: agent.systemPrompt || "Please provide your input..."
+      }
+    }
+
     onStep?.(`📥 Input agent processing: "${input.substring(0, 50)}${input.length > 50 ? "..." : ""}"`)
-    return input
+    return { content: input }
   }
 
   if (agent.type === "processor") {
@@ -147,13 +420,196 @@ export async function executeAgent(agent: Agent, input: string, onStep?: (step: 
         agent.systemPrompt,
         agent.model,
       )
+
+      // Check if the response indicates more information is needed
+      if (result.startsWith("MISSING_INFO:")) {
+        onStep?.(`❓ Agent requesting more information`)
+        return {
+          content: result,
+          needsMoreInfo: true,
+          infoRequest: result.substring("MISSING_INFO:".length).trim()
+        }
+      }
+
       onStep?.(`✅ Processor result: ${result.substring(0, 100)}${result.length > 100 ? "..." : ""}`)
-      return result
+      return { content: result }
     } catch (error) {
       console.error("Processor agent error:", error)
       const errorMessage = error instanceof Error ? error.message : "Unknown error"
       onStep?.(`❌ Processor agent failed: ${errorMessage}`)
       throw new Error(`Processor agent failed: ${errorMessage}`)
+    }
+  }
+
+  if (agent.type === "pdf") {
+    onStep?.(`📄 PDF agent processing text to PDF`)
+    try {
+      // Get document type and style
+      const documentType = agent.pdfConfig?.documentType || "general"
+      const style = getDefaultStyleForType(documentType)
+      
+      // Format content with AI
+      onStep?.(`📝 Analyzing and formatting content...`)
+      const formattedDoc = await formatContentWithAI(input, documentType)
+      
+      // Create PDF
+      const doc = new jsPDF({
+        format: style.format,
+        orientation: style.orientation
+      })
+
+      // Initialize position tracking
+      let currentY = style.margins.top
+      const pageWidth = doc.internal.pageSize.width
+      const maxWidth = pageWidth - style.margins.left - style.margins.right
+
+      // Helper function to add a new page
+      const addNewPage = () => {
+        doc.addPage()
+        currentY = style.margins.top
+      }
+
+      // Helper function to check and add new page if needed
+      const checkAndAddPage = (height: number) => {
+        if (currentY + height > doc.internal.pageSize.height - style.margins.bottom) {
+          addNewPage()
+          return true
+        }
+        return false
+      }
+
+      // Process each section
+      for (const section of formattedDoc.sections) {
+        switch (section.type) {
+          case 'title':
+            doc.setFontSize(style.titleFontSize)
+            doc.setFont(undefined, 'bold')
+            const titleLines = doc.splitTextToSize(section.content, maxWidth)
+            const titleHeight = titleLines.length * style.titleFontSize
+            checkAndAddPage(titleHeight)
+            doc.text(titleLines, style.margins.left, currentY)
+            currentY += titleHeight + 2  // Minimal spacing after title
+            break
+
+          case 'heading':
+            doc.setFontSize(style.headingFontSize)
+            doc.setFont(undefined, 'bold')
+            const headingLines = doc.splitTextToSize(section.content, maxWidth)
+            const headingHeight = headingLines.length * style.headingFontSize
+            checkAndAddPage(headingHeight)
+            currentY += 1  // Minimal space before heading
+            doc.text(headingLines, style.margins.left, currentY)
+            currentY += headingHeight + 1  // Minimal spacing after heading
+            break
+
+          case 'subheading':
+            doc.setFontSize(style.subheadingFontSize)
+            doc.setFont(undefined, 'bold')
+            const subheadingLines = doc.splitTextToSize(section.content, maxWidth)
+            const subheadingHeight = subheadingLines.length * style.subheadingFontSize * 1.1
+            checkAndAddPage(subheadingHeight)
+            currentY += 1  // Minimal space before subheading
+            doc.text(subheadingLines, style.margins.left, currentY)
+            currentY += subheadingHeight + 1  // Minimal spacing after subheading
+            break
+
+          case 'paragraph':
+            doc.setFontSize(style.defaultFontSize)
+            doc.setFont(undefined, 'normal')
+            const paragraphLines = doc.splitTextToSize(section.content, maxWidth)
+            const lineHeight = style.defaultFontSize * 0.75
+            const paragraphHeight = paragraphLines.length * lineHeight
+            checkAndAddPage(paragraphHeight)
+            
+            paragraphLines.forEach((line: string, index: number) => {
+              doc.text(line, style.margins.left, currentY + (index * lineHeight))
+            })
+            
+            // Check if next section is a title/heading to add more space
+            const nextSection = formattedDoc.sections[formattedDoc.sections.indexOf(section) + 1]
+            if (nextSection && (nextSection.type === 'title' || nextSection.type === 'heading')) {
+              currentY += paragraphHeight + 6  // More space before titles/headings
+            } else {
+              currentY += paragraphHeight + 1  // Normal spacing for other elements
+            }
+            break
+
+          case 'list':
+            doc.setFontSize(style.defaultFontSize)
+            doc.setFont(undefined, 'normal')
+            if (section.items) {
+              let totalHeight = 0
+              for (const item of section.items) {
+                const bulletPoint = '•'
+                const listItemText = `${bulletPoint} ${item}`
+                const listLines = doc.splitTextToSize(listItemText, maxWidth - 8)
+                const itemLineHeight = style.defaultFontSize * 0.75
+                const listItemHeight = listLines.length * itemLineHeight
+                checkAndAddPage(listItemHeight)
+                
+                listLines.forEach((line: string, index: number) => {
+                  doc.text(line, style.margins.left + 4, currentY + (index * itemLineHeight))
+                })
+                
+                currentY += listItemHeight
+                totalHeight += listItemHeight
+              }
+
+              // Check if next section is a title/heading to add more space
+              const nextSection = formattedDoc.sections[formattedDoc.sections.indexOf(section) + 1]
+              if (nextSection && (nextSection.type === 'title' || nextSection.type === 'heading')) {
+                currentY += 6  // More space before titles/headings
+              }
+            }
+            break
+
+          case 'quote':
+            doc.setFontSize(style.defaultFontSize)
+            doc.setFont(undefined, 'italic')
+            const quoteLines = doc.splitTextToSize(section.content, maxWidth - 16)
+            const quoteHeight = quoteLines.length * style.defaultFontSize * style.lineHeight
+            checkAndAddPage(quoteHeight)
+            doc.setDrawColor(200, 200, 200)
+            doc.line(style.margins.left + 2, currentY - 1, style.margins.left + 2, currentY + quoteHeight + 1)
+            doc.text(quoteLines, style.margins.left + 8, currentY)
+            currentY += quoteHeight + 1  // Minimal spacing after quotes
+            break
+
+          case 'code':
+            doc.setFontSize(style.defaultFontSize - 1)
+            doc.setFont('courier', 'normal')
+            const codeLines = doc.splitTextToSize(section.content, maxWidth - 8)
+            const codeHeight = codeLines.length * (style.defaultFontSize - 1) * 1.1
+            checkAndAddPage(codeHeight)
+            doc.setFillColor(248, 248, 248)
+            doc.rect(
+              style.margins.left, 
+              currentY - 1,
+              maxWidth, 
+              codeHeight + 2,
+              'F'
+            )
+            doc.text(codeLines, style.margins.left + 4, currentY)
+            currentY += codeHeight + 1  // Minimal spacing after code
+            break
+        }
+      }
+
+      // Generate filename
+      const filename = agent.pdfConfig?.filename || 
+        `${formattedDoc.metadata.title || documentType}-${Date.now()}.pdf`
+      
+      // Trigger download
+      downloadPDF(doc, filename)
+      
+      onStep?.(`✅ Created professional PDF document: ${filename}`)
+      return { content: `PDF file "${filename}" has been created and downloaded.` }
+
+    } catch (error) {
+      console.error("PDF agent error:", error)
+      const errorMessage = error instanceof Error ? error.message : "Unknown error"
+      onStep?.(`❌ PDF agent failed: ${errorMessage}`)
+      throw new Error(`PDF agent failed: ${errorMessage}`)
     }
   }
 
@@ -172,7 +628,7 @@ export async function executeAgent(agent: Agent, input: string, onStep?: (step: 
     try {
       const result = await callCustomAPI(agent.apiEndpoint, input, config)
       onStep?.(`✅ API result: ${result.substring(0, 100)}${result.length > 100 ? "..." : ""}`)
-      return result
+      return { content: result }
     } catch (error) {
       console.error("API agent error:", error)
       const errorMessage = error instanceof Error ? error.message : "Unknown error"
@@ -183,7 +639,7 @@ export async function executeAgent(agent: Agent, input: string, onStep?: (step: 
 
   if (agent.type === "output") {
     onStep?.(`📤 Output agent formatting result`)
-    return input
+    return { content: input }
   }
 
   throw new Error(`Unknown agent type: ${agent.type}`)
@@ -194,7 +650,9 @@ export async function executeWorkflow(
   input: string,
   onStep?: (step: string) => void,
   onNodeStatusChange?: (nodeId: string, status: "executing" | "completed" | "error") => void,
-) {
+  onNeedMoreInfo?: (request: string) => Promise<string>,
+  onNeedInput?: (prompt: string) => Promise<string>
+): Promise<string> {
   onStep?.("🚀 Starting workflow execution...")
 
   // Validate workflow
@@ -206,7 +664,6 @@ export async function executeWorkflow(
   const inputNodes = graph.nodes.filter((node) => node.type === "input")
   if (inputNodes.length === 0) {
     onStep?.("⚠️ No input node found, using first node as input")
-    // If no input node, treat the first node as input
     const firstNode = graph.nodes[0]
     if (firstNode) {
       inputNodes.push({ ...firstNode, type: "input" })
@@ -218,24 +675,12 @@ export async function executeWorkflow(
   // Initialize results map
   const results = new Map<string, string>()
   const processed = new Set<string>()
-
-  // Set input for input nodes
-  for (const node of inputNodes) {
-    onStep?.(`📝 Setting input for node: ${node.label || node.id}`)
-    onNodeStatusChange?.(node.id, "executing")
-
-    // Small delay to show the executing state
-    await new Promise((resolve) => setTimeout(resolve, 100))
-
-    results.set(node.id, input)
-    processed.add(node.id)
-    onNodeStatusChange?.(node.id, "completed")
-  }
+  const nodeRetries = new Map<string, number>()
 
   // Process nodes in topological order
   let hasProgress = true
   let iterations = 0
-  const maxIterations = graph.nodes.length * 2 // Prevent infinite loops
+  const maxIterations = graph.nodes.length * 5
 
   while (hasProgress && processed.size < graph.nodes.length && iterations < maxIterations) {
     hasProgress = false
@@ -253,10 +698,8 @@ export async function executeWorkflow(
       // Collect inputs from connected nodes
       let nodeInput = ""
       if (incomingEdges.length === 0) {
-        // No incoming edges, use original input
         nodeInput = input
       } else {
-        // Combine inputs from connected nodes
         const inputs = incomingEdges.map((edge) => results.get(edge.source)).filter(Boolean)
         nodeInput = inputs.join("\n\n")
       }
@@ -266,11 +709,29 @@ export async function executeWorkflow(
 
       try {
         const result = await executeAgent(node, nodeInput, onStep)
-        results.set(node.id, result)
+
+        // Handle case where agent needs input
+        if (result.needsInput && onNeedInput) {
+          onStep?.(`❓ Node ${node.label || node.id} needs user input`)
+          const userInput = await onNeedInput(result.inputPrompt || "Please provide input...")
+          nodeInput = userInput
+          const retryResult = await executeAgent(node, nodeInput, onStep)
+          results.set(node.id, retryResult.content)
+        }
+        // Handle case where agent needs more information
+        else if (result.needsMoreInfo && onNeedMoreInfo) {
+          onStep?.(`❓ Node ${node.label || node.id} needs more information`)
+          const additionalInfo = await onNeedMoreInfo(result.infoRequest || "Please provide more information.")
+          nodeInput = `${nodeInput}\n\nAdditional Information:\n${additionalInfo}`
+          const retryResult = await executeAgent(node, nodeInput, onStep)
+          results.set(node.id, retryResult.content)
+        } else {
+          results.set(node.id, result.content)
+        }
+
         processed.add(node.id)
         hasProgress = true
         onNodeStatusChange?.(node.id, "completed")
-
         onStep?.(`✅ Completed node: ${node.label || node.id}`)
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error"

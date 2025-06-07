@@ -1,6 +1,6 @@
 "use client"
 import { Separator } from "@/components/ui/separator"
-import { Bot, Cpu, MessageSquare, Globe, Code } from "lucide-react"
+import { Bot, Cpu, MessageSquare, Globe, Code, FileText } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 interface LeftPanelProps {
@@ -99,6 +99,25 @@ export function LeftPanel({ onAddNode, nodes, edges }: LeftPanelProps) {
                   <div className="ml-2">
                     <div className="text-sm font-medium">Output Agent</div>
                     <div className="text-xs text-gray-500">Formats final response</div>
+                  </div>
+                </div>
+              </div>
+              <div
+                className="p-3 border rounded-md cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                onClick={() => onAddNode("pdf")}
+                draggable
+                onDragStart={(event) => {
+                  event.dataTransfer.setData("application/reactflow", "pdf")
+                  event.dataTransfer.effectAllowed = "move"
+                }}
+              >
+                <div className="flex items-center">
+                  <div className="rounded-full w-8 h-8 flex items-center justify-center bg-orange-100">
+                    <FileText className="w-4 h-4 text-orange-500" />
+                  </div>
+                  <div className="ml-2">
+                    <div className="text-sm font-medium">PDF Agent</div>
+                    <div className="text-xs text-gray-500">Converts text to PDF</div>
                   </div>
                 </div>
               </div>

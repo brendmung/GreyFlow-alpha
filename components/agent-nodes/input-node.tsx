@@ -1,15 +1,29 @@
 import { memo } from "react"
 import { Handle, Position } from "reactflow"
-import { Bot, Loader2 } from "lucide-react"
+import { Bot, Loader2, MessageSquare } from "lucide-react"
 
-export const InputNode = memo(({ data, isConnectable }) => {
+interface InputNodeData {
+  label: string
+  prompt?: string
+  isExecuting?: boolean
+  isCompleted?: boolean
+  hasError?: boolean
+}
+
+interface InputNodeProps {
+  data: InputNodeData
+  isConnectable: boolean
+}
+
+export const InputNode = memo(({ data, isConnectable }: InputNodeProps) => {
   const isExecuting = data.isExecuting
   const isCompleted = data.isCompleted
   const hasError = data.hasError
+  const prompt = data.prompt || "Enter your input..."
 
   return (
     <div
-      className={`px-4 py-2 shadow-md rounded-md bg-white border-2 w-48 transition-all duration-300 ${
+      className={`px-4 py-2 shadow-md rounded-md bg-white border-2 w-64 transition-all duration-300 ${
         hasError
           ? "border-red-500 bg-red-50"
           : isExecuting
@@ -28,16 +42,21 @@ export const InputNode = memo(({ data, isConnectable }) => {
           {isExecuting ? (
             <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
           ) : (
-            <Bot
+            <MessageSquare
               className={`w-4 h-4 ${hasError ? "text-red-500" : isCompleted ? "text-green-500" : "text-blue-500"}`}
             />
           )}
         </div>
         <div className="ml-2">
           <div className="text-sm font-bold">{data.label}</div>
-          <div className="text-xs text-gray-500">User Input Agent</div>
+          <div className="text-xs text-gray-500">Input Agent</div>
         </div>
       </div>
+
+      <div className="mt-2 text-xs text-gray-600 bg-gray-50 p-2 rounded">
+        {prompt}
+      </div>
+
       <Handle
         type="source"
         position={Position.Bottom}
@@ -52,3 +71,4 @@ export const InputNode = memo(({ data, isConnectable }) => {
 })
 
 InputNode.displayName = "InputNode"
+
