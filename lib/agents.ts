@@ -100,6 +100,8 @@ export interface AgentResponse {
   infoRequest?: string
   needsInput?: boolean
   inputPrompt?: string
+  conversationHistory?: { role: string; content: string }[]
+  isComplete?: boolean
 }
 
 export async function callAI(endpoint: string, messages: any[], systemPrompt?: string, model?: string) {
@@ -387,22 +389,24 @@ function getDefaultStyleForType(documentType: string) {
   }
 }
 
-export async function executeAgent(agent: Agent, input: string, onStep?: (step: string) => void): Promise<AgentResponse> {
-  onStep?.(`🔄 Executing ${agent.type} agent: ${agent.label || agent.id}`)
-
+export async function executeAgent(
+  agent: Agent,
+  input: string,
+  onStep?: (step: string) => void,
+): Promise<AgentResponse> {
   if (agent.type === "input") {
-    // If there's no input, request it through dialog
-    if (!input.trim()) {
-      onStep?.(`❓ Input agent requesting user input`)
+    if (!input || input.trim() === "") {
       return {
         content: "",
         needsInput: true,
-        inputPrompt: agent.systemPrompt || "Please provide your input..."
+        inputPrompt: agent.systemPrompt || "Please provide input...",
       }
     }
-
-    onStep?.(`📥 Input agent processing: "${input.substring(0, 50)}${input.length > 50 ? "..." : ""}"`)
-    return { content: input }
+    // Input agent just passes through the input once received
+    return {
+      content: input,
+      isComplete: true,
+    }
   }
 
   if (agent.type === "processor") {
@@ -411,7 +415,29 @@ export async function executeAgent(agent: Agent, input: string, onStep?: (step: 
       `🧠 Processor agent${modelInfo} with system prompt: "${(agent.systemPrompt || "Default assistant").substring(0, 50)}..."`,
     )
 
-    const messages = [{ role: "user", content: input }]
+    // Parse input to extract conversation history if it exists
+    let conversationHistory: { role: string; content: string }[] = []
+    let currentInput = input
+
+    // Check if input contains conversation history
+    if (input.includes("__CONVERSATION_HISTORY__:")) {
+      const [history, newInput] = input.split("__NEW_INPUT__:")
+      const historyJson = history.replace("__CONVERSATION_HISTORY__:", "")
+      try {
+        conversationHistory = JSON.parse(historyJson)
+        currentInput = newInput.trim()
+      } catch (error) {
+        console.warn("Failed to parse conversation history, treating entire input as new")
+        currentInput = input
+      }
+    }
+
+    // Build messages array with conversation history
+    const messages = [
+      { role: "system", content: agent.systemPrompt || "You are a helpful assistant." },
+      ...conversationHistory,
+      { role: "user", content: currentInput }
+    ]
 
     try {
       const result = await callAI(
@@ -421,18 +447,40 @@ export async function executeAgent(agent: Agent, input: string, onStep?: (step: 
         agent.model,
       )
 
+      // Add the latest exchange to conversation history
+      conversationHistory.push({ role: "user", content: currentInput })
+      conversationHistory.push({ role: "assistant", content: result })
+
       // Check if the response indicates more information is needed
-      if (result.startsWith("MISSING_INFO:")) {
+      if (result.startsWith("MISSING_INFO:") || result.startsWith("SECTION_COMPLETE:")) {
         onStep?.(`❓ Agent requesting more information`)
         return {
           content: result,
           needsMoreInfo: true,
-          infoRequest: result.substring("MISSING_INFO:".length).trim()
+          infoRequest: result.startsWith("MISSING_INFO:") 
+            ? result.substring("MISSING_INFO:".length).trim()
+            : result.substring("SECTION_COMPLETE:".length).trim(),
+          conversationHistory,
+          isComplete: false
+        }
+      }
+
+      // Check if the response indicates completion
+      if (result.startsWith("COMPLETE:")) {
+        onStep?.(`✅ Processor completed with result`)
+        return {
+          content: result.substring("COMPLETE:".length).trim(),
+          conversationHistory,
+          isComplete: true
         }
       }
 
       onStep?.(`✅ Processor result: ${result.substring(0, 100)}${result.length > 100 ? "..." : ""}`)
-      return { content: result }
+      return { 
+        content: result,
+        conversationHistory,
+        isComplete: false
+      }
     } catch (error) {
       console.error("Processor agent error:", error)
       const errorMessage = error instanceof Error ? error.message : "Unknown error"
@@ -645,6 +693,76 @@ export async function executeAgent(agent: Agent, input: string, onStep?: (step: 
   throw new Error(`Unknown agent type: ${agent.type}`)
 }
 
+async function executeNodeWithRetry(
+  node: AgentNode,
+  nodeInput: string,
+  onStep?: (step: string) => void,
+  onNeedMoreInfo?: (request: string) => Promise<string>,
+  onNeedInput?: (prompt: string) => Promise<string>,
+  maxRetries: number = 10
+): Promise<{ content: string; isComplete: boolean }> {
+  // Special handling for input agents - they don't need retries
+  if (node.type === "input") {
+    const result = await executeAgent(node, nodeInput, onStep)
+    return { content: result.content, isComplete: true }
+  }
+
+  let currentInput = nodeInput
+  let conversationHistory: { role: string; content: string }[] = []
+  let retryCount = 0
+
+  while (retryCount < maxRetries) {
+    // Prepare input with conversation history
+    const inputWithHistory = conversationHistory.length > 0
+      ? `__CONVERSATION_HISTORY__:${JSON.stringify(conversationHistory)}__NEW_INPUT__:${currentInput}`
+      : currentInput
+
+    const result = await executeAgent(node, inputWithHistory, onStep)
+
+    // If we have conversation history from the result, use it
+    if (result.conversationHistory) {
+      conversationHistory = result.conversationHistory
+    }
+
+    // If the agent needs more input
+    if (result.needsInput && onNeedInput) {
+      onStep?.(`❓ Node ${node.label || node.id} needs user input`)
+      const userInput = await onNeedInput(result.inputPrompt || "Please provide input...")
+      currentInput = userInput
+      retryCount++
+      continue
+    }
+
+    // If the agent needs more information
+    if (result.needsMoreInfo && onNeedMoreInfo) {
+      onStep?.(`❓ Node ${node.label || node.id} needs more information`)
+      const additionalInfo = await onNeedMoreInfo(result.infoRequest || "Please provide more information.")
+      currentInput = additionalInfo
+      retryCount++
+      continue
+    }
+
+    // If the agent has completed its task or it's not a processor
+    if (result.isComplete || node.type !== "processor") {
+      return { content: result.content, isComplete: true }
+    }
+
+    // For processor agents, if we get here without completion, ask for more info
+    onStep?.(`❓ Node ${node.label || node.id} needs more information to complete its task`)
+    if (onNeedMoreInfo) {
+      const additionalInfo = await onNeedMoreInfo("Please provide any additional information to complete this task.")
+      currentInput = additionalInfo
+      retryCount++
+      continue
+    }
+
+    // If we can't get more info, treat as complete
+    return { content: result.content, isComplete: true }
+  }
+
+  throw new Error(`Max retries (${maxRetries}) exceeded for node ${node.label || node.id}`)
+}
+
 export async function executeWorkflow(
   graph: AgentGraph,
   input: string,
@@ -675,7 +793,6 @@ export async function executeWorkflow(
   // Initialize results map
   const results = new Map<string, string>()
   const processed = new Set<string>()
-  const nodeRetries = new Map<string, number>()
 
   // Process nodes in topological order
   let hasProgress = true
@@ -708,27 +825,16 @@ export async function executeWorkflow(
       onNodeStatusChange?.(node.id, "executing")
 
       try {
-        const result = await executeAgent(node, nodeInput, onStep)
+        // Execute node with retries and conversation management
+        const result = await executeNodeWithRetry(
+          node,
+          nodeInput,
+          onStep,
+          onNeedMoreInfo,
+          onNeedInput
+        )
 
-        // Handle case where agent needs input
-        if (result.needsInput && onNeedInput) {
-          onStep?.(`❓ Node ${node.label || node.id} needs user input`)
-          const userInput = await onNeedInput(result.inputPrompt || "Please provide input...")
-          nodeInput = userInput
-          const retryResult = await executeAgent(node, nodeInput, onStep)
-          results.set(node.id, retryResult.content)
-        }
-        // Handle case where agent needs more information
-        else if (result.needsMoreInfo && onNeedMoreInfo) {
-          onStep?.(`❓ Node ${node.label || node.id} needs more information`)
-          const additionalInfo = await onNeedMoreInfo(result.infoRequest || "Please provide more information.")
-          nodeInput = `${nodeInput}\n\nAdditional Information:\n${additionalInfo}`
-          const retryResult = await executeAgent(node, nodeInput, onStep)
-          results.set(node.id, retryResult.content)
-        } else {
-          results.set(node.id, result.content)
-        }
-
+        results.set(node.id, result.content)
         processed.add(node.id)
         hasProgress = true
         onNodeStatusChange?.(node.id, "completed")
