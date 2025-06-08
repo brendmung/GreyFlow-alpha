@@ -479,7 +479,7 @@ export async function executeAgent(
       return { 
         content: result,
         conversationHistory,
-        isComplete: false
+        isComplete: true // Default to complete if no other condition met
       }
     } catch (error) {
       console.error("Processor agent error:", error)
