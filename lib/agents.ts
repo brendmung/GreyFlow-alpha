@@ -701,9 +701,19 @@ async function executeNodeWithRetry(
   onNeedInput?: (prompt: string) => Promise<string>,
   maxRetries: number = 10
 ): Promise<{ content: string; isComplete: boolean }> {
-  // Special handling for input agents - they don't need retries
+  // Special handling for input agents
   if (node.type === "input") {
     const result = await executeAgent(node, nodeInput, onStep)
+    
+    // If input agent needs input, get it from the user
+    if (result.needsInput && onNeedInput) {
+      onStep?.(`❓ Node ${node.label || node.id} needs user input`)
+      const userInput = await onNeedInput(result.inputPrompt || "Please provide input...")
+      // Execute the input agent again with the user's input
+      const finalResult = await executeAgent(node, userInput, onStep)
+      return { content: finalResult.content, isComplete: true }
+    }
+    
     return { content: result.content, isComplete: true }
   }
 
