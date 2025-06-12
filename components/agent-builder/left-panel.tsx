@@ -1,151 +1,113 @@
 "use client"
+
+import type React from "react"
+import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { Bot, Cpu, MessageSquare, Globe, Code, FileText } from "lucide-react"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Badge } from "@/components/ui/badge"
+import { Bot, Globe, MessageSquare, Play, FileImage, File } from "lucide-react"
+import type { Node, Edge } from "reactflow"
 
 interface LeftPanelProps {
   onAddNode: (type: string) => void
-  nodes: any[]
-  edges: any[]
+  nodes: Node[]
+  edges: Edge[]
 }
 
+const nodeTypes = [
+  {
+    type: "input",
+    label: "Input",
+    icon: MessageSquare,
+    description: "Collect user input",
+    color: "bg-blue-100 text-blue-800 border-blue-200",
+  },
+  {
+    type: "processor",
+    label: "Processor",
+    icon: Bot,
+    description: "AI processing agent",
+    color: "bg-purple-100 text-purple-800 border-purple-200",
+  },
+  {
+    type: "api",
+    label: "API",
+    icon: Globe,
+    description: "External API call",
+    color: "bg-green-100 text-green-800 border-green-200",
+  },
+  {
+    type: "output",
+    label: "Output",
+    icon: Play,
+    description: "Display results",
+    color: "bg-gray-100 text-gray-800 border-gray-200",
+  },
+  {
+    type: "pdf",
+    label: "PDF",
+    icon: FileImage,
+    description: "Generate PDF document",
+    color: "bg-red-100 text-red-800 border-red-200",
+  },
+  {
+    type: "word",
+    label: "Word",
+    icon: File,
+    description: "Generate Word document",
+    color: "bg-orange-100 text-orange-800 border-orange-200",
+  },
+]
+
 export function LeftPanel({ onAddNode, nodes, edges }: LeftPanelProps) {
+  const onDragStart = (event: React.DragEvent<HTMLButtonElement>, nodeType: string) => {
+    event.dataTransfer.setData("application/reactflow", nodeType)
+    event.dataTransfer.effectAllowed = "move"
+  }
+
   return (
-    <div className="h-full border-r flex flex-col bg-background">
-      <Tabs defaultValue="agents" className="h-full flex flex-col">
-        <div className="border-b px-4 flex-shrink-0">
-          <TabsList className="my-2">
-            <TabsTrigger value="agents">Agent Types</TabsTrigger>
-            <TabsTrigger value="code">Workflow Code</TabsTrigger>
-          </TabsList>
+    <div className="w-full h-full bg-background border-r flex flex-col">
+      <div className="p-4 border-b">
+        <h2 className="font-semibold text-lg">Agent Nodes</h2>
+        <p className="text-sm text-muted-foreground">Drag nodes to the canvas</p>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {nodeTypes.map((nodeType) => {
+          const Icon = nodeType.icon
+          return (
+            <Button
+              key={nodeType.type}
+              variant="outline"
+              className={`w-full h-auto p-3 flex flex-col items-start gap-2 cursor-grab active:cursor-grabbing ${nodeType.color}`}
+              onDragStart={(e) => onDragStart(e, nodeType.type)}
+              draggable
+              onClick={() => onAddNode(nodeType.type)}
+            >
+              <div className="flex items-center gap-2 w-full">
+                <Icon className="h-4 w-4" />
+                <span className="font-medium">{nodeType.label}</span>
+              </div>
+              <span className="text-xs text-left">{nodeType.description}</span>
+            </Button>
+          )
+        })}
+      </div>
+
+      <Separator />
+
+      <div className="p-4 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium">Workflow Stats</span>
         </div>
-
-        <TabsContent value="agents" className="flex-1 p-4 overflow-auto m-0">
-          <div className="space-y-4 h-full flex flex-col">
-            <p className="text-sm text-gray-500">Click to add agents to your workflow</p>
-            <Separator className="my-2" />
-
-            <div className="space-y-3 flex-1">
-              <div
-                className="p-3 border rounded-md cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                onClick={() => onAddNode("input")}
-                draggable
-                onDragStart={(event) => {
-                  event.dataTransfer.setData("application/reactflow", "input")
-                  event.dataTransfer.effectAllowed = "move"
-                }}
-              >
-                <div className="flex items-center">
-                  <div className="rounded-full w-8 h-8 flex items-center justify-center bg-blue-100">
-                    <Bot className="w-4 h-4 text-blue-500" />
-                  </div>
-                  <div className="ml-2">
-                    <div className="text-sm font-medium">Input Agent</div>
-                    <div className="text-xs text-gray-500">Processes user input</div>
-                  </div>
-                </div>
-              </div>
-              <div
-                className="p-3 border rounded-md cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                onClick={() => onAddNode("processor")}
-                draggable
-                onDragStart={(event) => {
-                  event.dataTransfer.setData("application/reactflow", "processor")
-                  event.dataTransfer.effectAllowed = "move"
-                }}
-              >
-                <div className="flex items-center">
-                  <div className="rounded-full w-8 h-8 flex items-center justify-center bg-green-100">
-                    <Cpu className="w-4 h-4 text-green-500" />
-                  </div>
-                  <div className="ml-2">
-                    <div className="text-sm font-medium">Processor Agent</div>
-                    <div className="text-xs text-gray-500">Processes information</div>
-                  </div>
-                </div>
-              </div>
-              <div
-                className="p-3 border rounded-md cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                onClick={() => onAddNode("api")}
-                draggable
-                onDragStart={(event) => {
-                  event.dataTransfer.setData("application/reactflow", "api")
-                  event.dataTransfer.effectAllowed = "move"
-                }}
-              >
-                <div className="flex items-center">
-                  <div className="rounded-full w-8 h-8 flex items-center justify-center bg-orange-100">
-                    <Globe className="w-4 h-4 text-orange-500" />
-                  </div>
-                  <div className="ml-2">
-                    <div className="text-sm font-medium">API Agent</div>
-                    <div className="text-xs text-gray-500">Makes API calls</div>
-                  </div>
-                </div>
-              </div>
-              <div
-                className="p-3 border rounded-md cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                onClick={() => onAddNode("output")}
-                draggable
-                onDragStart={(event) => {
-                  event.dataTransfer.setData("application/reactflow", "output")
-                  event.dataTransfer.effectAllowed = "move"
-                }}
-              >
-                <div className="flex items-center">
-                  <div className="rounded-full w-8 h-8 flex items-center justify-center bg-purple-100">
-                    <MessageSquare className="w-4 h-4 text-purple-500" />
-                  </div>
-                  <div className="ml-2">
-                    <div className="text-sm font-medium">Output Agent</div>
-                    <div className="text-xs text-gray-500">Formats final response</div>
-                  </div>
-                </div>
-              </div>
-              <div
-                className="p-3 border rounded-md cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                onClick={() => onAddNode("pdf")}
-                draggable
-                onDragStart={(event) => {
-                  event.dataTransfer.setData("application/reactflow", "pdf")
-                  event.dataTransfer.effectAllowed = "move"
-                }}
-              >
-                <div className="flex items-center">
-                  <div className="rounded-full w-8 h-8 flex items-center justify-center bg-orange-100">
-                    <FileText className="w-4 h-4 text-orange-500" />
-                  </div>
-                  <div className="ml-2">
-                    <div className="text-sm font-medium">PDF Agent</div>
-                    <div className="text-xs text-gray-500">Converts text to PDF</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 flex-shrink-0">
-              <Separator className="my-2" />
-              <div className="text-xs text-gray-500">Connect agents by dragging from one node's handle to another.</div>
-            </div>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="code" className="flex-1 overflow-hidden m-0">
-          <div className="h-full flex flex-col">
-            <div className="flex items-center justify-between border-b px-4 flex-shrink-0">
-              <div className="flex items-center py-2">
-                <Code className="h-4 w-4 mr-2" />
-                <h3 className="text-sm font-medium">Workflow Code</h3>
-              </div>
-            </div>
-            <div className="p-4 flex-1 overflow-auto">
-              <pre className="p-4 bg-gray-100 dark:bg-gray-800 rounded-md overflow-auto text-sm min-h-full">
-                {JSON.stringify({ nodes, edges }, null, 2)}
-              </pre>
-            </div>
-          </div>
-        </TabsContent>
-      </Tabs>
+        <div className="flex gap-2">
+          <Badge variant="secondary" className="text-xs">
+            {nodes.length} nodes
+          </Badge>
+          <Badge variant="secondary" className="text-xs">
+            {edges.length} connections
+          </Badge>
+        </div>
+      </div>
     </div>
   )
 }

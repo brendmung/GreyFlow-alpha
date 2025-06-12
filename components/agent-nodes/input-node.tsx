@@ -1,6 +1,6 @@
 import { memo } from "react"
 import { Handle, Position } from "reactflow"
-import { Bot, Loader2, MessageSquare } from "lucide-react"
+import { Loader2, MessageSquare } from "lucide-react"
 
 interface InputNodeData {
   label: string
@@ -23,14 +23,14 @@ export const InputNode = memo(({ data, isConnectable }: InputNodeProps) => {
 
   return (
     <div
-      className={`px-4 py-2 shadow-md rounded-md bg-white border-2 w-64 transition-all duration-300 ${
+      className={`px-4 py-2 shadow-md rounded-md border-2 w-64 transition-all duration-300 ${
         hasError
-          ? "border-red-500 bg-red-50"
+          ? "border-red-500 bg-red-50 dark:bg-red-950/30"
           : isExecuting
-            ? "border-blue-600 bg-blue-50 shadow-lg animate-pulse"
+            ? "border-blue-600 bg-blue-50 dark:bg-blue-950/30 shadow-lg animate-pulse"
             : isCompleted
-              ? "border-green-500 bg-green-50"
-              : "border-blue-500"
+              ? "border-green-500 bg-green-50 dark:bg-green-950/30"
+              : "border-blue-500 bg-white dark:bg-gray-800"
       }`}
     >
       <Handle
@@ -45,24 +45,36 @@ export const InputNode = memo(({ data, isConnectable }: InputNodeProps) => {
       <div className="flex items-center">
         <div
           className={`rounded-full w-8 h-8 flex items-center justify-center transition-colors ${
-            hasError ? "bg-red-100" : isExecuting ? "bg-blue-200" : isCompleted ? "bg-green-100" : "bg-blue-100"
+            hasError
+              ? "bg-red-100 dark:bg-red-900/50"
+              : isExecuting
+                ? "bg-blue-200 dark:bg-blue-900/50"
+                : isCompleted
+                  ? "bg-green-100 dark:bg-green-900/50"
+                  : "bg-blue-100 dark:bg-blue-900/50"
           }`}
         >
           {isExecuting ? (
-            <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
+            <Loader2 className="w-4 h-4 text-blue-600 dark:text-blue-400 animate-spin" />
           ) : (
             <MessageSquare
-              className={`w-4 h-4 ${hasError ? "text-red-500" : isCompleted ? "text-green-500" : "text-blue-500"}`}
+              className={`w-4 h-4 ${
+                hasError
+                  ? "text-red-500 dark:text-red-400"
+                  : isCompleted
+                    ? "text-green-500 dark:text-green-400"
+                    : "text-blue-500 dark:text-blue-400"
+              }`}
             />
           )}
         </div>
         <div className="ml-2">
-          <div className="text-sm font-bold">{data.label}</div>
-          <div className="text-xs text-gray-500">Input Agent</div>
+          <div className="text-sm font-bold text-gray-800 dark:text-gray-200">{data.label}</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">Input Agent</div>
         </div>
       </div>
 
-      <div className="mt-2 text-xs text-gray-600 bg-gray-50 p-2 rounded">
+      <div className="mt-2 text-xs text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700/50 p-2 rounded">
         {prompt}
       </div>
 
@@ -80,4 +92,3 @@ export const InputNode = memo(({ data, isConnectable }: InputNodeProps) => {
 })
 
 InputNode.displayName = "InputNode"
-

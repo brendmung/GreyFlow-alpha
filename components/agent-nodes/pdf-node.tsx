@@ -27,31 +27,31 @@ const DOCUMENT_TYPES = [
   { value: "research", label: "Research Paper" },
   { value: "report", label: "Report" },
   { value: "letter", label: "Letter" },
-  { value: "custom", label: "Custom" }
+  { value: "custom", label: "Custom" },
 ]
 
 export function PDFNode({ data, selected, id }: PDFNodeProps) {
   const borderColor = data.hasError
     ? "border-red-500"
     : data.isCompleted
-    ? "border-green-500"
-    : data.isExecuting
-    ? "border-blue-600 bg-blue-50 shadow-lg animate-pulse"
-    : selected
-    ? "border-gray-900 dark:border-gray-100"
-    : "border-gray-200 dark:border-gray-800"
+      ? "border-green-500"
+      : data.isExecuting
+        ? "border-blue-600 bg-blue-50 dark:bg-blue-950/30 shadow-lg animate-pulse"
+        : selected
+          ? "border-gray-900 dark:border-gray-100"
+          : "border-gray-200 dark:border-gray-800"
 
   return (
     <div className={`px-4 py-2 rounded-md border-2 bg-background ${borderColor} min-w-[200px]`}>
       <Handle type="target" position={Position.Left} className="w-2 h-2" />
-      
+
       <div className="flex items-center gap-2">
-        <div className="rounded-full w-8 h-8 flex items-center justify-center bg-orange-100">
-          <FileText className="w-4 h-4 text-orange-500" />
+        <div className="rounded-full w-8 h-8 flex items-center justify-center bg-orange-100 dark:bg-orange-900/50">
+          <FileText className="w-4 h-4 text-orange-500 dark:text-orange-400" />
         </div>
         <div className="flex flex-col">
-          <p className="text-sm font-medium">{data.label}</p>
-          <p className="text-xs text-gray-500">Smart PDF Generator</p>
+          <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{data.label}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">Smart PDF Generator</p>
         </div>
       </div>
 
@@ -93,4 +93,4 @@ export function PDFNode({ data, selected, id }: PDFNodeProps) {
       <Handle type="source" position={Position.Right} className="w-2 h-2" />
     </div>
   )
-} 
+}

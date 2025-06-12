@@ -1,24 +1,45 @@
 "use client"
-
-import { useState, useEffect, useCallback } from "react"
-import { X, Play, Trash2, Check, Loader2, Plus, Minus, Copy, CheckCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Separator } from "@/components/ui/separator"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useToast } from "@/components/ui/use-toast"
-import { API_TEMPLATES, type APIRequestConfig } from "@/lib/api-handler"
+import { Badge } from "@/components/ui/badge"
+import { Trash2, Play, Settings, Loader2, FileText } from "lucide-react"
+import type { Node } from "reactflow"
+import { MessageSquare, Cpu, Globe } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
-const AI_MODELS = [
-  { value: "gpt-4o", label: "GPT-4o", provider: "OpenAI" },
-  { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo", provider: "OpenAI" },
-  { value: "gpt-4.1", label: "GPT-4.1", provider: "OpenAI" },
-  { value: "nova-ai", label: "Nova AI", provider: "Amazon" },
-  { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash", provider: "Google" },
-]
+interface AgentNodeData {
+  label: string
+  systemPrompt?: string
+  apiEndpoint?: string
+  model?: string
+  prompt?: string
+  apiConfig?: {
+    method?: string
+    queryParams?: Record<string, string>
+    headers?: Record<string, string>
+    body?: string
+    authType?: string
+    authToken?: string
+    authKey?: string
+    authValue?: string
+  }
+  pdfConfig?: {
+    filename?: string
+    documentType?: string
+  }
+  wordConfig?: {
+    filename?: string
+    documentType?: string
+  }
+  isExecuting?: boolean
+  isCompleted?: boolean
+  hasError?: boolean
+}
+
+type FlowAgentNode = Node<AgentNodeData>
 
 interface RightPanelProps {
   selectedNode: FlowAgentNode | null
@@ -30,7 +51,7 @@ interface RightPanelProps {
   isRunning: boolean
   onRunWorkflow: () => void
   onDeleteNode: (nodeId: string) => void
-  isMobile: boolean
+  isMobile?: boolean
 }
 
 export function RightPanel({
@@ -43,302 +64,191 @@ export function RightPanel({
   isRunning,
   onRunWorkflow,
   onDeleteNode,
-  isMobile,
+  isMobile = false,
 }: RightPanelProps) {
-  const { toast } = useToast()
-  const [label, setLabel] = useState("")
-  const [systemPrompt, setSystemPrompt] = useState("")
-  const [apiEndpoint, setApiEndpoint] = useState("")
-  const [model, setModel] = useState("gpt-4o")
-  const [selectedTemplate, setSelectedTemplate] = useState("custom")
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
-  const [inputPrompt, setInputPrompt] = useState("")
-  const [showCopySuccess, setShowCopySuccess] = useState(false)
-
-  useEffect(() => {
+  const handleNodeUpdate = (field: string, value: any) => {
     if (selectedNode) {
-      setLabel(selectedNode.data.label || "")
-      setSystemPrompt(selectedNode.data.systemPrompt || "")
-      setApiEndpoint(selectedNode.data.apiEndpoint || "")
-      setModel(selectedNode.data.model || "gpt-4o")
-      setInputPrompt(selectedNode.data.prompt || "")
-      setHasUnsavedChanges(false)
-    }
-  }, [selectedNode])
-
-  const handleSave = useCallback(() => {
-    if (!selectedNode) return
-
-    const updates: any = {
-      label,
-    }
-
-    if (selectedNode.type === "processor") {
-      updates.systemPrompt = systemPrompt
-      updates.model = model
-    } else if (selectedNode.type === "api") {
-      updates.apiEndpoint = apiEndpoint
-      updates.apiConfig = selectedNode.data.apiConfig
-    } else if (selectedNode.type === "input") {
-      updates.prompt = inputPrompt
-    }
-
-    updateNodeData(selectedNode.id, updates)
-    setHasUnsavedChanges(false)
-    toast({
-      title: "Changes saved",
-      description: "Node configuration has been updated.",
-    })
-  }, [selectedNode, label, systemPrompt, apiEndpoint, model, inputPrompt, updateNodeData, toast])
-
-  const handleTemplateSelect = (templateKey: string) => {
-    if (templateKey === "custom") {
-      setSelectedTemplate("")
-      return
-    }
-
-    const template = API_TEMPLATES[templateKey as keyof typeof API_TEMPLATES]
-    if (template) {
-      setSelectedTemplate(templateKey)
-      setApiEndpoint(template.endpoint)
-      setModel(template.config.model || "gpt-4o")
-      setSystemPrompt(template.config.systemPrompt || "")
+      updateNodeData(selectedNode.id, { [field]: value })
     }
   }
 
-  const addHeader = () => {
-    // Implementation of addHeader function
-  }
-
-  const updateHeader = (oldKey: string, newKey: string, value: string) => {
-    // Implementation of updateHeader function
-  }
-
-  const removeHeader = (key: string) => {
-    // Implementation of removeHeader function
-  }
-
-  const addQueryParam = () => {
-    // Implementation of addQueryParam function
-  }
-
-  const updateQueryParam = (oldKey: string, newKey: string, value: string) => {
-    // Implementation of updateQueryParam function
-  }
-
-  const removeQueryParam = (key: string) => {
-    // Implementation of removeQueryParam function
-  }
-
-  const handleDelete = () => {
+  const handleNestedUpdate = (parent: string, field: string, value: any) => {
     if (selectedNode) {
-      onDeleteNode(selectedNode.id)
+      const currentData = selectedNode.data[parent as keyof AgentNodeData] || {}
+      updateNodeData(selectedNode.id, {
+        [parent]: {
+          ...currentData,
+          [field]: value,
+        },
+      })
     }
   }
 
-  const handleCancel = () => {
-    if (selectedNode) {
-      setLabel(selectedNode.data.label || "")
-      setSystemPrompt(selectedNode.data.systemPrompt || "")
-      setApiEndpoint(selectedNode.data.apiEndpoint || "")
-      setModel(selectedNode.data.model || "gpt-4o")
-      setInputPrompt(selectedNode.data.prompt || "")
-      setHasUnsavedChanges(false)
-    }
-    setSelectedNode(null)
+  const renderNodeEditor = () => {
+    if (!selectedNode) {
+      return (
+        <div className="p-6 text-center text-muted-foreground">
+          <Settings className="h-12 w-12 mx-auto mb-3 opacity-50" />
+          <h3 className="font-medium mb-1">No Node Selected</h3>
+          <p className="text-sm">Select a node to edit its properties</p>
+        </div>
+      )
   }
-
-  const formatLastSaved = (date: Date) => {
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffSeconds = Math.floor(diffMs / 1000)
-    const diffMinutes = Math.floor(diffSeconds / 60)
-
-    if (diffSeconds < 10) return "just now"
-    if (diffSeconds < 60) return `${diffSeconds}s ago`
-    if (diffMinutes < 60) return `${diffMinutes}m ago`
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-  }
-
-  const handleInputFocus = () => {
-    if (isMobile) {
-      setTimeout(() => {
-        window.scrollTo(0, 0)
-      }, 100)
-    }
-  }
-
-  const handleCopyOutput = useCallback(() => {
-    if (output) {
-      navigator.clipboard.writeText(output)
-      setShowCopySuccess(true)
-      setTimeout(() => setShowCopySuccess(false), 2000)
-    }
-  }, [output])
 
   return (
-    <div className="h-full w-full border-l bg-background">
-      <div className="p-4 h-full flex flex-col">
-        <Tabs defaultValue="inspector" className="h-full flex flex-col">
-          <div className="border-b px-4 flex-shrink-0">
-            <TabsList className="my-2">
-              <TabsTrigger value="inspector">Node Inspector</TabsTrigger>
-              <TabsTrigger value="output">Workflow Output</TabsTrigger>
-            </TabsList>
+      <div className="space-y-6">
+        {/* Header with node type and delete button */}
+        <div className="flex items-center justify-between pb-2 border-b">
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="capitalize font-medium">
+              {selectedNode.type} Node
+            </Badge>
+            {selectedNode.data.isExecuting && (
+              <Badge variant="secondary" className="text-xs">
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                Running
+              </Badge>
+            )}
+            {selectedNode.data.isCompleted && (
+              <Badge variant="default" className="text-xs bg-green-500">
+                Completed
+              </Badge>
+            )}
+            {selectedNode.data.hasError && (
+              <Badge variant="destructive" className="text-xs">
+                Error
+              </Badge>
+            )}
           </div>
-
-          <TabsContent value="inspector" className="flex-1 p-4 overflow-auto m-0">
-            {selectedNode ? (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold">Node Configuration</h3>
-                  <div className="flex items-center gap-2">
-                    <Button size="sm" variant="outline" onClick={() => onDeleteNode(selectedNode.id)}>
-                      <Trash2 className="w-4 h-4" />
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+            onClick={() => {
+              onDeleteNode(selectedNode.id)
+              setSelectedNode(null)
+            }}
+          >
+            <Trash2 className="h-4 w-4 mr-1" />
+            Delete
                     </Button>
-                    <Button size="sm" onClick={handleSave} disabled={!hasUnsavedChanges}>
-                      Save Changes
-                    </Button>
-                  </div>
                 </div>
 
+        {/* Basic Configuration */}
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="node-label">Label</Label>
+            <Label htmlFor="label" className="text-sm font-medium">
+              Node Label
+            </Label>
                     <Input
-                      id="node-label"
-                      value={label}
-                      onChange={(e) => {
-                        setLabel(e.target.value)
-                        setHasUnsavedChanges(true)
-                      }}
-                      placeholder="Node Label"
+              id="label"
+              value={selectedNode.data.label}
+              onChange={(e) => handleNodeUpdate("label", e.target.value)}
+              placeholder="Enter node name"
+              className="mt-1"
                     />
                   </div>
 
+          {/* Input Node Configuration */}
                   {selectedNode.type === "input" && (
+            <div className="space-y-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <h4 className="font-medium text-blue-900 flex items-center gap-2">
+                <MessageSquare className="h-4 w-4" />
+                Input Configuration
+              </h4>
                     <div>
-                      <Label htmlFor="input-prompt">Input Prompt</Label>
+                <Label htmlFor="prompt" className="text-sm font-medium">
+                  User Prompt
+                </Label>
                       <Textarea
-                        id="input-prompt"
-                        value={inputPrompt}
-                        onChange={(e) => {
-                          setInputPrompt(e.target.value)
-                          setHasUnsavedChanges(true)
-                        }}
-                        placeholder="Enter the prompt to show when requesting input..."
-                        className="min-h-[100px]"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        This prompt will be shown to users when the workflow needs their input.
-                      </p>
+                  id="prompt"
+                  value={selectedNode.data.prompt || ""}
+                  onChange={(e) => handleNodeUpdate("prompt", e.target.value)}
+                  placeholder="What should this input ask the user?"
+                  className="mt-1 min-h-[80px]"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  This message will be shown to users when input is needed
+                </p>
+              </div>
                     </div>
                   )}
 
+          {/* Processor Node Configuration */}
                   {selectedNode.type === "processor" && (
-                    <>
+            <div className="space-y-4 p-4 bg-green-50 rounded-lg border border-green-200">
+              <h4 className="font-medium text-green-900 flex items-center gap-2">
+                <Cpu className="h-4 w-4" />
+                AI Processing Configuration
+              </h4>
+              <div className="grid grid-cols-1 gap-4">
                       <div>
-                        <Label htmlFor="model">AI Model</Label>
+                  <Label htmlFor="model" className="text-sm font-medium">
+                    AI Model
+                  </Label>
                         <Select
-                          value={model}
-                          onValueChange={(value) => {
-                            setModel(value)
-                            setHasUnsavedChanges(true)
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
+                    value={selectedNode.data.model || "gpt-4o"}
+                    onValueChange={(value) => handleNodeUpdate("model", value)}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Select AI model" />
                           </SelectTrigger>
                           <SelectContent>
-                            {AI_MODELS.map((model) => (
-                              <SelectItem key={model.value} value={model.value}>
-                                {model.label}
-                              </SelectItem>
-                            ))}
+                      <SelectItem value="gpt-4o">GPT-4o (Recommended)</SelectItem>
+                      <SelectItem value="gpt-4o-mini">GPT-4o Mini (Faster)</SelectItem>
+                      <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo (Budget)</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
-
                       <div>
-                        <Label htmlFor="system-prompt">System Prompt</Label>
+                  <Label htmlFor="systemPrompt" className="text-sm font-medium">
+                    System Instructions
+                  </Label>
                         <Textarea
-                          id="system-prompt"
-                          value={systemPrompt}
-                          onChange={(e) => {
-                            setSystemPrompt(e.target.value)
-                            setHasUnsavedChanges(true)
-                          }}
-                          placeholder="Enter system prompt..."
-                          className="min-h-[200px]"
-                        />
+                    id="systemPrompt"
+                    value={selectedNode.data.systemPrompt || ""}
+                    onChange={(e) => handleNodeUpdate("systemPrompt", e.target.value)}
+                    placeholder="Define the AI agent's role and behavior..."
+                    className="mt-1 min-h-[120px] font-mono text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Instructions that define how the AI should behave and respond
+                  </p>
+                </div>
+              </div>
                       </div>
-                    </>
                   )}
 
+          {/* API Node Configuration */}
                   {selectedNode.type === "api" && (
-                    <>
+            <div className="space-y-4 p-4 bg-orange-50 rounded-lg border border-orange-200">
+              <h4 className="font-medium text-orange-900 flex items-center gap-2">
+                <Globe className="h-4 w-4" />
+                API Configuration
+              </h4>
+              <div className="grid grid-cols-1 gap-4">
                       <div>
-                        <Label htmlFor="api-template">API Template (Optional)</Label>
-                        <Select value={selectedTemplate} onValueChange={handleTemplateSelect}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Choose a template or configure manually" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="custom">Custom Configuration</SelectItem>
-                            {Object.entries(API_TEMPLATES).map(([key, template]) => (
-                              <SelectItem key={key} value={key}>
-                                {template.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <p className="text-xs text-gray-500 mt-1">
-                          Templates provide pre-configured settings for popular APIs
-                        </p>
-                      </div>
-
-                      <div>
-                        <Label htmlFor="api-endpoint">API Endpoint *</Label>
+                  <Label htmlFor="apiEndpoint" className="text-sm font-medium">
+                    API Endpoint URL
+                  </Label>
                         <Input
-                          id="api-endpoint"
-                          value={apiEndpoint}
-                          onChange={(e) => setApiEndpoint(e.target.value)}
+                    id="apiEndpoint"
+                    value={selectedNode.data.apiEndpoint || ""}
+                    onChange={(e) => handleNodeUpdate("apiEndpoint", e.target.value)}
                           placeholder="https://api.example.com/endpoint"
-                          className={hasUnsavedChanges ? "border-orange-300" : ""}
+                    className="mt-1 font-mono text-sm"
                         />
-                        <p className="text-xs text-gray-500 mt-1">
-                          Use {"{input}"} or {"{{input}}"} as placeholder for user input
-                        </p>
                       </div>
-
-                      <div className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          id="cors-proxy"
-                          checked={selectedNode.data.apiConfig?.useCorsProxy || false}
-                          onChange={(e) => {
-                            const newConfig = { ...selectedNode.data.apiConfig, useCorsProxy: e.target.checked }
-                            updateNodeData(selectedNode.id, { apiConfig: newConfig })
-                            setHasUnsavedChanges(true)
-                          }}
-                          className="rounded"
-                        />
-                        <Label htmlFor="cors-proxy" className="text-sm">
-                          Use CORS proxy (for testing APIs that don't support CORS)
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="method" className="text-sm font-medium">
+                      Method
                         </Label>
-                      </div>
-                      <p className="text-xs text-gray-500 -mt-2">
-                        ⚠️ Only use for testing. CORS proxies may not be reliable for production.
-                      </p>
-
-                      <div>
-                        <Label htmlFor="api-method">HTTP Method</Label>
-                        <Select value={selectedNode.data.apiConfig?.method || "GET"} onValueChange={(value: any) => {
-                          const newConfig = { ...selectedNode.data.apiConfig, method: value }
-                          updateNodeData(selectedNode.id, { apiConfig: newConfig })
-                          setHasUnsavedChanges(true)
-                        }}>
-                          <SelectTrigger>
+                    <Select
+                      value={selectedNode.data.apiConfig?.method || "GET"}
+                      onValueChange={(value) => handleNestedUpdate("apiConfig", "method", value)}
+                    >
+                      <SelectTrigger className="mt-1">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -350,246 +260,210 @@ export function RightPanel({
                           </SelectContent>
                         </Select>
                       </div>
-
                       <div>
-                        <Label>Authentication</Label>
-                        <Select value={selectedNode.data.apiConfig?.authType || "none"} onValueChange={(value: any) => {
-                          const newConfig = { ...selectedNode.data.apiConfig, authType: value }
-                          updateNodeData(selectedNode.id, { apiConfig: newConfig })
-                          setHasUnsavedChanges(true)
-                        }}>
-                          <SelectTrigger>
+                    <Label htmlFor="authType" className="text-sm font-medium">
+                      Authentication
+                    </Label>
+                    <Select
+                      value={selectedNode.data.apiConfig?.authType || "none"}
+                      onValueChange={(value) => handleNestedUpdate("apiConfig", "authType", value)}
+                    >
+                      <SelectTrigger className="mt-1">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="none">No Authentication</SelectItem>
+                        <SelectItem value="none">None</SelectItem>
                             <SelectItem value="bearer">Bearer Token</SelectItem>
                             <SelectItem value="apikey">API Key</SelectItem>
                             <SelectItem value="basic">Basic Auth</SelectItem>
                           </SelectContent>
                         </Select>
-
-                        {selectedNode.data.apiConfig?.authType !== "none" && (
-                          <div className="mt-2 space-y-2">
-                            {selectedNode.data.apiConfig?.authType === "apikey" && (
-                              <Input
-                                placeholder="Header name (e.g., X-API-Key)"
-                                value={selectedNode.data.apiConfig?.authHeader || ""}
-                                onChange={(e) => {
-                                  const newConfig = { ...selectedNode.data.apiConfig, authHeader: e.target.value }
-                                  updateNodeData(selectedNode.id, { apiConfig: newConfig })
-                                  setHasUnsavedChanges(true)
-                                }}
-                              />
-                            )}
-                            <Input
-                              type="password"
-                              placeholder={selectedNode.data.apiConfig?.authType === "basic" ? "username:password" : "Token/API Key"}
-                              value={selectedNode.data.apiConfig?.authValue || ""}
-                              onChange={(e) => {
-                                const newConfig = { ...selectedNode.data.apiConfig, authValue: e.target.value }
-                                updateNodeData(selectedNode.id, { apiConfig: newConfig })
-                                setHasUnsavedChanges(true)
-                              }}
-                            />
+                  </div>
+                </div>
+              </div>
                           </div>
                         )}
-                      </div>
 
-                      {selectedNode.data.apiConfig?.method === "GET" && (
+          {/* PDF Node Configuration */}
+          {selectedNode.type === "pdf" && (
+            <div className="space-y-4 p-4 bg-red-50 rounded-lg border border-red-200">
+              <h4 className="font-medium text-red-900 flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                PDF Generation Settings
+              </h4>
+              <div className="grid grid-cols-1 gap-4">
                         <div>
-                          <div className="flex items-center justify-between">
-                            <Label>Query Parameters</Label>
-                            <Button size="sm" variant="outline" onClick={addQueryParam}>
-                              <Plus className="h-3 w-3" />
-                            </Button>
-                          </div>
-                          <div className="space-y-2 mt-2">
-                            {Object.entries(selectedNode.data.apiConfig?.queryParams || {}).map(([key, value]) => (
-                              <div key={key} className="flex gap-2">
+                  <Label htmlFor="pdfFilename" className="text-sm font-medium">
+                    Output Filename
+                  </Label>
                                 <Input
-                                  placeholder="Parameter name"
-                                  value={key}
-                                  onChange={(e) => {
-                                    const newParams = { ...selectedNode.data.apiConfig?.queryParams, [e.target.value]: value }
-                                    const newConfig = { ...selectedNode.data.apiConfig, queryParams: newParams }
-                                    updateNodeData(selectedNode.id, { apiConfig: newConfig })
-                                    setHasUnsavedChanges(true)
-                                  }}
-                                  className="flex-1"
-                                />
-                                <Input
-                                  placeholder="Value (use {{input}} for user input)"
-                                  value={value}
-                                  onChange={(e) => {
-                                    const newParams = { ...selectedNode.data.apiConfig?.queryParams, [key]: e.target.value }
-                                    const newConfig = { ...selectedNode.data.apiConfig, queryParams: newParams }
-                                    updateNodeData(selectedNode.id, { apiConfig: newConfig })
-                                    setHasUnsavedChanges(true)
-                                  }}
-                                  className="flex-1"
-                                />
-                                <Button size="sm" variant="outline" onClick={() => {
-                                  const newParams = { ...selectedNode.data.apiConfig?.queryParams }
-                                  delete newParams[key]
-                                  const newConfig = { ...selectedNode.data.apiConfig, queryParams: newParams }
-                                  updateNodeData(selectedNode.id, { apiConfig: newConfig })
-                                  setHasUnsavedChanges(true)
-                                }}>
-                                  <Minus className="h-3 w-3" />
-                                </Button>
+                    id="pdfFilename"
+                    value={selectedNode.data.pdfConfig?.filename || ""}
+                    onChange={(e) => handleNestedUpdate("pdfConfig", "filename", e.target.value)}
+                    placeholder="document.pdf"
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="pdfDocumentType" className="text-sm font-medium">
+                    Document Template
+                  </Label>
+                  <Select
+                    value={selectedNode.data.pdfConfig?.documentType || "general"}
+                    onValueChange={(value) => handleNestedUpdate("pdfConfig", "documentType", value)}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="general">General Document</SelectItem>
+                      <SelectItem value="cv">CV/Resume</SelectItem>
+                      <SelectItem value="research">Research Paper</SelectItem>
+                      <SelectItem value="report">Business Report</SelectItem>
+                      <SelectItem value="letter">Formal Letter</SelectItem>
+                      <SelectItem value="custom">Custom Format</SelectItem>
+                    </SelectContent>
+                  </Select>
                               </div>
-                            ))}
                           </div>
                         </div>
                       )}
 
-                      {["POST", "PUT", "PATCH"].includes(selectedNode.data.apiConfig?.method || "GET") && (
+          {/* Word Node Configuration */}
+          {selectedNode.type === "word" && (
+            <div className="space-y-4 p-4 bg-orange-50 rounded-lg border border-orange-200">
+              <h4 className="font-medium text-orange-900 flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Word Document Settings
+              </h4>
+              <div className="grid grid-cols-1 gap-4">
                         <div>
-                          <Label htmlFor="body-template">Request Body Template</Label>
-                          <Textarea
-                            id="body-template"
-                            value={selectedNode.data.apiConfig?.bodyTemplate || ""}
-                            onChange={(e) => {
-                              const newConfig = { ...selectedNode.data.apiConfig, bodyTemplate: e.target.value }
-                              updateNodeData(selectedNode.id, { apiConfig: newConfig })
-                              setHasUnsavedChanges(true)
-                            }}
-                            placeholder='{"query": "{{input}}", "limit": 10}'
-                            className="h-24 resize-none"
-                          />
-                          <p className="text-xs text-gray-500 mt-1">
-                            JSON template for request body. Use {"{{input}}"} for user input.
-                          </p>
+                  <Label htmlFor="wordFilename" className="text-sm font-medium">
+                    Output Filename
+                  </Label>
+                  <Input
+                    id="wordFilename"
+                    value={selectedNode.data.wordConfig?.filename || ""}
+                    onChange={(e) => handleNestedUpdate("wordConfig", "filename", e.target.value)}
+                    placeholder="document.docx"
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="wordDocumentType" className="text-sm font-medium">
+                    Document Template
+                  </Label>
+                  <Select
+                    value={selectedNode.data.wordConfig?.documentType || "general"}
+                    onValueChange={(value) => handleNestedUpdate("wordConfig", "documentType", value)}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="general">General Document</SelectItem>
+                      <SelectItem value="cv">CV/Resume</SelectItem>
+                      <SelectItem value="research">Research Paper</SelectItem>
+                      <SelectItem value="report">Business Report</SelectItem>
+                      <SelectItem value="letter">Formal Letter</SelectItem>
+                      <SelectItem value="custom">Custom Format</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
                         </div>
                       )}
+        </div>
+      </div>
+    )
+  }
 
-                      <div>
-                        <div className="flex items-center justify-between">
-                          <Label>Custom Headers</Label>
-                          <Button size="sm" variant="outline" onClick={addHeader}>
-                            <Plus className="h-3 w-3" />
-                          </Button>
-                        </div>
-                        <div className="space-y-2 mt-2">
-                          {Object.entries(selectedNode.data.apiConfig?.headers || {}).map(([key, value]) => (
-                            <div key={key} className="flex gap-2">
-                              <Input
-                                placeholder="Header name"
-                                value={key}
-                                onChange={(e) => {
-                                  const newHeaders = { ...selectedNode.data.apiConfig?.headers, [e.target.value]: value }
-                                  const newConfig = { ...selectedNode.data.apiConfig, headers: newHeaders }
-                                  updateNodeData(selectedNode.id, { apiConfig: newConfig })
-                                  setHasUnsavedChanges(true)
-                                }}
-                                className="flex-1"
-                              />
-                              <Input
-                                placeholder="Header value"
-                                value={value}
-                                onChange={(e) => {
-                                  const newHeaders = { ...selectedNode.data.apiConfig?.headers, [key]: e.target.value }
-                                  const newConfig = { ...selectedNode.data.apiConfig, headers: newHeaders }
-                                  updateNodeData(selectedNode.id, { apiConfig: newConfig })
-                                  setHasUnsavedChanges(true)
-                                }}
-                                className="flex-1"
-                              />
-                              <Button size="sm" variant="outline" onClick={() => {
-                                const newHeaders = { ...selectedNode.data.apiConfig?.headers }
-                                delete newHeaders[key]
-                                const newConfig = { ...selectedNode.data.apiConfig, headers: newHeaders }
-                                updateNodeData(selectedNode.id, { apiConfig: newConfig })
-                                setHasUnsavedChanges(true)
-                              }}>
-                                <Minus className="h-3 w-3" />
-                              </Button>
+  return (
+    <div className="w-full h-full bg-background border-l flex flex-col">
+      <div className="p-4 border-b">
+        <h2 className="font-semibold text-lg">Properties</h2>
+      </div>
+
+      <div className="flex-1 flex flex-col h-full overflow-hidden">
+        <Tabs defaultValue="configuration" className="flex-1 flex flex-col h-full">
+          <div className="px-4 pt-2">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="configuration">Node Configuration</TabsTrigger>
+              <TabsTrigger value="output">Workflow Output</TabsTrigger>
+            </TabsList>
+          </div>
+
+          <div className="flex-1 overflow-hidden">
+            <TabsContent value="configuration" className="h-full p-4 m-0 overflow-auto">
+              {renderNodeEditor()}
+            </TabsContent>
+
+            <TabsContent value="output" className="h-full flex flex-col p-4 m-0">
+              <div className="bg-gray-50 border rounded-lg p-4 flex-1 overflow-auto mb-3">
+                <div className="font-mono text-sm">
+                  {output ? (
+                    <div className="space-y-1">
+                      {output.split("\n").map((line, index) => (
+                        <div key={index} className="flex">
+                          <span className="text-gray-400 mr-3 select-none text-xs">
+                            {String(index + 1).padStart(2, "0")}
+                          </span>
+                          <span
+                            className={
+                              line.includes("Error") || line.includes("Failed")
+                                ? "text-red-600"
+                                : line.includes("Completed") || line.includes("Success")
+                                  ? "text-green-600"
+                                  : line.includes("Starting") || line.includes("Processing")
+                                    ? "text-blue-600"
+                                    : "text-gray-700"
+                            }
+                          >
+                            {line || " "}
+                          </span>
                             </div>
                           ))}
                         </div>
+                  ) : (
+                    <div className="text-gray-500 italic h-full flex flex-col justify-center items-center">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                        <span>Ready to execute workflow</span>
                       </div>
-                    </>
+                      <div className="text-xs">Click "Run Workflow" to see execution logs here...</div>
+                    </div>
                   )}
                 </div>
               </div>
-            ) : (
-              <div className="h-full flex items-center justify-center text-center">
-                <div className="max-w-md space-y-2">
-                  <h3 className="text-lg font-semibold">No Node Selected</h3>
-                  <p className="text-sm text-gray-500">
-                    Select a node in the workflow to view and edit its configuration.
-                  </p>
-                </div>
-              </div>
-            )}
-          </TabsContent>
 
-          <TabsContent value="output" className="flex-1 p-4 overflow-auto m-0">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Workflow Output</h3>
-                <Button size="sm" onClick={onRunWorkflow} disabled={isRunning}>
+              <div className="flex gap-2">
+                <Button className="flex-1" onClick={onRunWorkflow} disabled={isRunning} size="sm">
                   {isRunning ? (
                     <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Running...
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Executing...
                     </>
                   ) : (
                     <>
-                      <Play className="mr-2 h-4 w-4" />
+                      <Play className="h-4 w-4 mr-2" />
                       Run Workflow
                     </>
                   )}
                 </Button>
-              </div>
-
-              <div className="relative min-h-[200px] bg-gray-50 dark:bg-gray-900 rounded-md p-4 font-mono text-sm overflow-auto">
-                {output ? (
-                  <>
-                  <div className="whitespace-pre-wrap">
-                    {output.split("\n").map((line, i) => (
-                      <div key={i} className="mb-1">
-                        {line}
-                      </div>
-                    ))}
-                  </div>
-                    {output.includes("Final Result:") && (
-                      <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                        <div className="flex items-center justify-between">
-                          <div className="font-semibold">Final Result:</div>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              const finalResult = output.split("Final Result:")[1].trim()
-                              navigator.clipboard.writeText(finalResult)
-                              setShowCopySuccess(true)
-                              setTimeout(() => setShowCopySuccess(false), 2000)
-                            }}
-                            className="h-8 w-8 p-0"
-                          >
-                            {showCopySuccess ? (
-                              <CheckCheck className="h-4 w-4 text-green-500" />
-                            ) : (
-                              <Copy className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </div>
-                        <div className="mt-2 whitespace-pre-wrap">
-                          {output.split("Final Result:")[1].trim()}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center text-gray-400">
-                    Run the workflow to see output here
-                  </div>
+                {output && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      navigator.clipboard.writeText(output)
+                    }}
+                  >
+                    Copy Log
+                  </Button>
                 )}
               </div>
+            </TabsContent>
             </div>
-          </TabsContent>
         </Tabs>
       </div>
     </div>

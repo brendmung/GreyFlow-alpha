@@ -21,7 +21,17 @@ import ReactFlow, {
 import "reactflow/dist/style.css"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Save, ArrowLeft, Download, Upload, Bot, Code, Play, Loader2, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen } from "lucide-react"
+import {
+  Save,
+  ArrowLeft,
+  Download,
+  Play,
+  Loader2,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
+} from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { InputNode } from "@/components/agent-nodes/input-node"
 import { ProcessorNode } from "@/components/agent-nodes/processor-node"
@@ -30,14 +40,21 @@ import { APINode } from "@/components/agent-nodes/api-node"
 import { PDFNode } from "@/components/agent-nodes/pdf-node"
 import { LeftPanel } from "@/components/agent-builder/left-panel"
 import { RightPanel } from "@/components/agent-builder/right-panel"
-import Link from "next/link"
 import { executeWorkflow } from "@/lib/agents"
-import type { AgentGraph, AgentNode as WorkflowAgentNode } from "@/lib/agents"
+import type { AgentGraph } from "@/lib/agents"
 import type { APIRequestConfig } from "@/lib/api-handler"
 import { ExportDialog } from "@/components/agent-builder/export-dialog"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
 import { NewWorkflowDialog } from "@/components/agent-builder/new-workflow-dialog"
 import { Textarea } from "@/components/ui/textarea"
+import { WordNode } from "@/components/agent-nodes/word-node"
 
 type HTTPMethod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH"
 type AuthType = "none" | "bearer" | "apikey" | "basic"
@@ -50,6 +67,10 @@ interface AgentNodeData {
   prompt?: string
   apiConfig?: APIRequestConfig
   pdfConfig?: {
+    filename?: string
+    documentType?: "general" | "cv" | "research" | "report" | "letter" | "custom"
+  }
+  wordConfig?: {
     filename?: string
     documentType?: "general" | "cv" | "research" | "report" | "letter" | "custom"
   }
@@ -73,6 +94,7 @@ const nodeTypes: NodeTypes = {
   output: OutputNode,
   api: APINode,
   pdf: PDFNode,
+  word: WordNode,
 }
 
 const templates: Record<string, Template> = {
@@ -221,13 +243,13 @@ Return the formatted CV content ready for PDF conversion.`,
           label: "PDF Generator",
           pdfConfig: {
             documentType: "cv",
-            filename: "professional_cv.pdf"
+            filename: "professional_cv.pdf",
           },
           isExecuting: false,
           isCompleted: false,
           hasError: false,
         },
-      }
+      },
     ],
     edges: [
       { id: "e1-2", source: "input-1", target: "processor-1", animated: true },
@@ -398,25 +420,10 @@ Return the formatted CV content ready for PDF conversion.`,
       {
         id: "input-1",
         type: "input",
-        position: { x: 50, y: 200 },
+        position: { x: 100, y: 200 },
         data: {
-          label: "Content Topic",
-          isExecuting: false,
-          isCompleted: false,
-          hasError: false,
-        },
-      },
-      {
-        id: "api-1",
-        type: "api",
-        position: { x: 200, y: 150 },
-        data: {
-          label: "Inspiration API",
-          apiEndpoint: "https://api.quotable.io/random",
-          apiConfig: {
-            method: "GET",
-            authType: "none",
-          },
+          label: "Content Brief",
+          prompt: "Describe what content you need (topic, target audience, purpose, length, tone, etc.)",
           isExecuting: false,
           isCompleted: false,
           hasError: false,
@@ -425,11 +432,91 @@ Return the formatted CV content ready for PDF conversion.`,
       {
         id: "processor-1",
         type: "processor",
-        position: { x: 200, y: 250 },
+        position: { x: 300, y: 200 },
+        data: {
+          label: "Content Strategist",
+          systemPrompt: `You are an expert content strategist who helps plan effective content. Your job is to:
+
+1. Analyze the content brief provided by the user
+2. Create a detailed content outline with clear sections
+3. Suggest key points to cover in each section
+4. Recommend tone, style, and approach based on target audience
+5. Provide research suggestions and potential sources
+6. Suggest headline options and SEO keywords
+
+FORMAT YOUR RESPONSE:
+- Start with a brief analysis of the content brief
+- Provide 3-5 headline options
+- Create a structured outline with main sections and subsections
+- For each section, include 3-5 key points to cover
+- Suggest tone, style, and content approach
+- Recommend SEO keywords and phrases to include
+- End with any additional strategic recommendations
+
+Be specific, actionable, and focused on creating high-quality content that meets the user's goals.`,
+          model: "gpt-4o",
+          isExecuting: false,
+          isCompleted: false,
+          hasError: false,
+        },
+      },
+      {
+        id: "processor-2",
+        type: "processor",
+        position: { x: 500, y: 200 },
         data: {
           label: "Content Writer",
-          systemPrompt:
-            "Create engaging, well-structured content based on the topic and any inspirational content provided. Include compelling headlines and clear structure.",
+          systemPrompt: `You are a skilled content writer who creates engaging, well-structured content. Your task is to:
+
+1. Use the content strategy and outline provided
+2. Write complete, polished content following the outline
+3. Maintain a consistent tone and style throughout
+4. Include engaging headlines, subheadings, and transitions
+5. Incorporate suggested keywords naturally
+6. Create content that is both informative and engaging
+
+WRITING GUIDELINES:
+- Start with a compelling introduction that hooks the reader
+- Follow the outline structure but feel free to improve it
+- Use clear, concise language appropriate for the target audience
+- Include relevant examples, data points, or stories to illustrate key points
+- Create smooth transitions between sections
+- End with a strong conclusion and call-to-action if appropriate
+- Naturally incorporate SEO keywords without keyword stuffing
+
+Write complete, publication-ready content that fulfills the brief and follows the strategy.`,
+          model: "gpt-4o",
+          isExecuting: false,
+          isCompleted: false,
+          hasError: false,
+        },
+      },
+      {
+        id: "processor-3",
+        type: "processor",
+        position: { x: 700, y: 200 },
+        data: {
+          label: "Content Editor",
+          systemPrompt: `You are a meticulous content editor who polishes and perfects written content. Your job is to:
+
+1. Review the content for clarity, coherence, and impact
+2. Improve sentence structure and word choice
+3. Ensure consistent tone and style
+4. Check for logical flow and organization
+5. Enhance readability and engagement
+6. Optimize for SEO without sacrificing quality
+7. Fix any grammar, spelling, or punctuation errors
+
+EDITING APPROACH:
+- Preserve the writer's voice while enhancing clarity
+- Vary sentence structure for better rhythm and flow
+- Replace weak or generic words with more precise, impactful alternatives
+- Ensure transitions between paragraphs and sections are smooth
+- Check that the content fulfills the original brief
+- Format the content appropriately with proper headings, lists, etc.
+- Add or enhance calls-to-action if appropriate
+
+Return the fully edited, publication-ready content.`,
           model: "gpt-4o",
           isExecuting: false,
           isCompleted: false,
@@ -439,7 +526,7 @@ Return the formatted CV content ready for PDF conversion.`,
       {
         id: "output-1",
         type: "output",
-        position: { x: 400, y: 200 },
+        position: { x: 900, y: 200 },
         data: {
           label: "Final Content",
           isExecuting: false,
@@ -449,10 +536,10 @@ Return the formatted CV content ready for PDF conversion.`,
       },
     ],
     edges: [
-      { id: "e1-2", source: "input-1", target: "api-1", animated: true },
-      { id: "e1-3", source: "input-1", target: "processor-1", animated: true },
-      { id: "e2-3", source: "api-1", target: "processor-1", animated: true },
-      { id: "e3-4", source: "processor-1", target: "output-1", animated: true },
+      { id: "e1-2", source: "input-1", target: "processor-1", animated: true },
+      { id: "e2-3", source: "processor-1", target: "processor-2", animated: true },
+      { id: "e3-4", source: "processor-2", target: "processor-3", animated: true },
+      { id: "e4-5", source: "processor-3", target: "output-1", animated: true },
     ],
   },
 }
@@ -499,12 +586,14 @@ export default function BuilderPage() {
   useEffect(() => {
     if (templateLoaded) {
       const currentState = { nodes, edges, workflowName }
-      const savedState = currentWorkflowId ? JSON.parse(localStorage.getItem("greyflow_workflows") || "{}")?.[currentWorkflowId] : null
-      
-      const hasChanges = savedState ? (
-        JSON.stringify({ nodes: savedState.nodes, edges: savedState.edges, workflowName: savedState.name }) !==
-        JSON.stringify(currentState)
-      ) : nodes.length > 0 || edges.length > 0
+      const savedState = currentWorkflowId
+        ? JSON.parse(localStorage.getItem("greyflow_workflows") || "{}")?.[currentWorkflowId]
+        : null
+
+      const hasChanges = savedState
+        ? JSON.stringify({ nodes: savedState.nodes, edges: savedState.edges, workflowName: savedState.name }) !==
+          JSON.stringify(currentState)
+        : nodes.length > 0 || edges.length > 0
 
       setHasUnsavedChanges(hasChanges)
     }
@@ -533,28 +622,31 @@ export default function BuilderPage() {
     }
   }
 
-  const createNewWorkflow = useCallback((name: string) => {
-    const newNode = {
-      id: `input-${Date.now()}`,
-      type: "input",
-      position: { x: 250, y: 200 },
-      data: {
-        label: "Input",
-        isExecuting: false,
-        isCompleted: false,
-        hasError: false,
-      },
-    }
-    setNodes([newNode])
-    setEdges([])
-    setWorkflowName(name)
-    setTemplateLoaded(true)
-    setIsNewWorkflowDialogOpen(false)
-    toast({
-      title: "Workflow created",
-      description: `Created new workflow: ${name}`,
-    })
-  }, [setNodes, setEdges, toast])
+  const createNewWorkflow = useCallback(
+    (name: string) => {
+      const newNode = {
+        id: `input-${Date.now()}`,
+        type: "input",
+        position: { x: 250, y: 200 },
+        data: {
+          label: "Input",
+          isExecuting: false,
+          isCompleted: false,
+          hasError: false,
+        },
+      }
+      setNodes([newNode])
+      setEdges([])
+      setWorkflowName(name)
+      setTemplateLoaded(true)
+      setIsNewWorkflowDialogOpen(false)
+      toast({
+        title: "Workflow created",
+        description: `Created new workflow: ${name}`,
+      })
+    },
+    [setNodes, setEdges, toast],
+  )
 
   // Load workflow data on component mount
   useEffect(() => {
@@ -636,12 +728,15 @@ export default function BuilderPage() {
 
       // Generate a new ID if this is a new workflow
       const workflowId = currentWorkflowId || `workflow-${Date.now()}`
-      
+
       // Save to workflows storage
+      // Replace this broken line:
+      // const existingWorkflows = JSON.parse(localStorage.getItem("greyflow_workflows\") || \"{}\"))
+      // With this corrected line:
       const existingWorkflows = JSON.parse(localStorage.getItem("greyflow_workflows") || "{}")
       existingWorkflows[workflowId] = workflow
       localStorage.setItem("greyflow_workflows", JSON.stringify(existingWorkflows))
-      
+
       // Update current workflow ID and reset changes flag
       setCurrentWorkflowId(workflowId)
       setHasUnsavedChanges(false)
@@ -695,17 +790,20 @@ export default function BuilderPage() {
             isExecuting: false,
             isCompleted: false,
             hasError: false,
-            apiConfig: type === "api" ? {
-              method: "GET" as HTTPMethod,
-              authType: "none" as AuthType,
-            } : undefined,
+            apiConfig:
+              type === "api"
+                ? {
+                    method: "GET" as HTTPMethod,
+                    authType: "none" as AuthType,
+                  }
+                : undefined,
           },
         }
 
         setNodes((nds) => [...nds, newNode])
       }
     },
-    [setNodes, instance]
+    [setNodes, instance],
   )
 
   const handleNodeClick: NodeMouseHandler = useCallback(
@@ -717,17 +815,14 @@ export default function BuilderPage() {
         setLeftPanelOpen(false)
       }
     },
-    [isMobile]
+    [isMobile],
   )
 
-  const handleEdgeClick: EdgeMouseHandler = useCallback(
-    (event, edge) => {
-      event.stopPropagation()
-      setSelectedEdge(edge)
-      setSelectedNode(null)
-    },
-    []
-  )
+  const handleEdgeClick: EdgeMouseHandler = useCallback((event, edge) => {
+    event.stopPropagation()
+    setSelectedEdge(edge)
+    setSelectedNode(null)
+  }, [])
 
   const addNewNode = useCallback(
     (type: string) => {
@@ -740,10 +835,13 @@ export default function BuilderPage() {
           systemPrompt: type === "processor" ? "You are a helpful assistant." : undefined,
           apiEndpoint: type === "api" ? "" : undefined,
           model: type === "processor" ? "gpt-4o" : undefined,
-          apiConfig: type === "api" ? {
-            method: "GET" as HTTPMethod,
-            authType: "none" as AuthType,
-          } : undefined,
+          apiConfig:
+            type === "api"
+              ? {
+                  method: "GET" as HTTPMethod,
+                  authType: "none" as AuthType,
+                }
+              : undefined,
           isExecuting: false,
           isCompleted: false,
           hasError: false,
@@ -752,7 +850,7 @@ export default function BuilderPage() {
 
       setNodes((nds) => [...nds, newNode])
     },
-    [setNodes]
+    [setNodes],
   )
 
   const deleteNode = useCallback(
@@ -850,36 +948,39 @@ export default function BuilderPage() {
     )
   }, [setNodes])
 
-  const exportWorkflow = useCallback((name: string) => {
-    try {
-      const workflow = {
-        name: name,
-        nodes,
-        edges,
-        version: "1.0",
-        format: "GreyFlow",
-        exportedAt: new Date().toISOString(),
+  const exportWorkflow = useCallback(
+    (name: string) => {
+      try {
+        const workflow = {
+          name: name,
+          nodes,
+          edges,
+          version: "1.0",
+          format: "GreyFlow",
+          exportedAt: new Date().toISOString(),
+        }
+        const dataStr = JSON.stringify(workflow, null, 2)
+        const dataBlob = new Blob([dataStr], { type: "application/json" })
+        const url = URL.createObjectURL(dataBlob)
+        const link = document.createElement("a")
+        link.href = url
+        link.download = `${name.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.gre`
+        link.click()
+        URL.revokeObjectURL(url)
+        toast({
+          title: "Workflow exported",
+          description: "Your workflow has been downloaded as a .gre file.",
+        })
+      } catch (error) {
+        toast({
+          title: "Export failed",
+          description: "Failed to export workflow. Please try again.",
+          variant: "destructive",
+        })
       }
-      const dataStr = JSON.stringify(workflow, null, 2)
-      const dataBlob = new Blob([dataStr], { type: "application/json" })
-      const url = URL.createObjectURL(dataBlob)
-      const link = document.createElement("a")
-      link.href = url
-      link.download = `${name.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.gre`
-      link.click()
-      URL.revokeObjectURL(url)
-      toast({
-        title: "Workflow exported",
-        description: "Your workflow has been downloaded as a .gre file.",
-      })
-    } catch (error) {
-      toast({
-        title: "Export failed",
-        description: "Failed to export workflow. Please try again.",
-        variant: "destructive",
-      })
-    }
-  }, [nodes, edges, toast])
+    },
+    [nodes, edges, toast],
+  )
 
   const handleRunWorkflow = useCallback(async () => {
     if (nodes.length === 0) {
@@ -896,25 +997,28 @@ export default function BuilderPage() {
       setOutput("")
 
       const workflowData: AgentGraph = {
-        nodes: nodes.map(node => ({
+        nodes: nodes.map((node) => ({
           id: node.id,
-          type: node.type || 'processor',
+          type: node.type || "processor",
           systemPrompt: node.data.systemPrompt,
           apiEndpoint: node.data.apiEndpoint,
           model: node.data.model,
           label: node.data.label,
           prompt: node.data.prompt,
           pdfConfig: node.data.pdfConfig,
-          apiConfig: node.data.apiConfig ? {
-            ...node.data.apiConfig,
-            method: (node.data.apiConfig.method || 'GET') as HTTPMethod,
-            authType: (node.data.apiConfig.authType || 'none') as AuthType,
-          } : undefined,
+          apiConfig: node.data.apiConfig
+            ? {
+                ...node.data.apiConfig,
+                method: (node.data.apiConfig.method || "GET") as HTTPMethod,
+                authType: (node.data.apiConfig.authType || "none") as AuthType,
+              }
+            : undefined,
+          wordConfig: node.data.wordConfig,
         })),
-        edges: edges.map(edge => ({
+        edges: edges.map((edge) => ({
           source: edge.source,
           target: edge.target,
-        }))
+        })),
       }
 
       const handleNeedInput = async (prompt: string): Promise<string> => {
@@ -937,30 +1041,30 @@ export default function BuilderPage() {
         workflowData,
         "", // Start with empty input, let input agents request it
         (step: string) => {
-          setOutput(prev => prev + step + "\n")
+          setOutput((prev) => prev + step + "\n")
         },
         (nodeId: string, status: "executing" | "completed" | "error") => {
-          setNodes(nds => 
-            nds.map(n => 
-              n.id === nodeId 
+          setNodes((nds) =>
+            nds.map((n) =>
+              n.id === nodeId
                 ? {
                     ...n,
                     data: {
                       ...n.data,
                       isExecuting: status === "executing",
                       isCompleted: status === "completed",
-                      hasError: status === "error"
-                    }
+                      hasError: status === "error",
+                    },
                   }
-                : n
-            )
+                : n,
+            ),
           )
         },
         handleNeedMoreInfo,
-        handleNeedInput
+        handleNeedInput,
       )
-      
-      setOutput(prev => prev + "\nFinal Result: " + result)
+
+      setOutput((prev) => prev + "\nFinal Result: " + result)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error occurred"
       toast({
@@ -973,22 +1077,28 @@ export default function BuilderPage() {
     }
   }, [nodes, edges, setNodes, toast])
 
-  const handleInfoSubmit = useCallback((additionalInfo: string) => {
-    if (infoResolver) {
-      infoResolver(additionalInfo)
-      setInfoResolver(null)
-      setIsInfoDialogOpen(false)
-    }
-  }, [infoResolver])
+  const handleInfoSubmit = useCallback(
+    (additionalInfo: string) => {
+      if (infoResolver) {
+        infoResolver(additionalInfo)
+        setInfoResolver(null)
+        setIsInfoDialogOpen(false)
+      }
+    },
+    [infoResolver],
+  )
 
-  const handleInputSubmit = useCallback((input: string) => {
-    if (inputResolver) {
-      inputResolver(input)
-      setInputResolver(null)
-      setIsInputDialogOpen(false)
-      setCurrentInput("")
-    }
-  }, [inputResolver])
+  const handleInputSubmit = useCallback(
+    (input: string) => {
+      if (inputResolver) {
+        inputResolver(input)
+        setInputResolver(null)
+        setIsInputDialogOpen(false)
+        setCurrentInput("")
+      }
+    },
+    [inputResolver],
+  )
 
   const handleLeftResize = useCallback(
     (e: React.MouseEvent) => {
@@ -1055,11 +1165,11 @@ export default function BuilderPage() {
         setRightPanelOpen(true)
       }
     }
-    
+
     checkMobile()
-    window.addEventListener('resize', checkMobile)
-    
-    return () => window.removeEventListener('resize', checkMobile)
+    window.addEventListener("resize", checkMobile)
+
+    return () => window.removeEventListener("resize", checkMobile)
   }, [leftPanelOpen, rightPanelOpen])
 
   // Handle mobile touch events
@@ -1070,8 +1180,8 @@ export default function BuilderPage() {
           e.preventDefault()
         }
       }
-      document.addEventListener('touchmove', handleTouchMove, { passive: false })
-      return () => document.removeEventListener('touchmove', handleTouchMove)
+      document.addEventListener("touchmove", handleTouchMove, { passive: false })
+      return () => document.removeEventListener("touchmove", handleTouchMove)
     }
   }, [isMobile, rightPanelOpen])
 
@@ -1140,14 +1250,14 @@ export default function BuilderPage() {
     if (isMobile && !leftPanelOpen && rightPanelOpen) {
       setRightPanelOpen(false)
     }
-    setLeftPanelOpen(prev => !prev)
+    setLeftPanelOpen((prev) => !prev)
   }, [isMobile, leftPanelOpen, rightPanelOpen])
 
   const toggleRightPanel = useCallback(() => {
     if (isMobile && !rightPanelOpen && leftPanelOpen) {
       setLeftPanelOpen(false)
     }
-    setRightPanelOpen(prev => !prev)
+    setRightPanelOpen((prev) => !prev)
   }, [isMobile, rightPanelOpen, leftPanelOpen])
 
   return (
@@ -1155,10 +1265,7 @@ export default function BuilderPage() {
       <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="flex items-center justify-between h-14 px-4">
           <div className="flex items-center gap-4">
-            <button 
-              onClick={() => handleNavigation("/")}
-              className="flex items-center gap-2 hover:text-foreground"
-            >
+            <button onClick={() => handleNavigation("/")} className="flex items-center gap-2 hover:text-foreground">
               <ArrowLeft className="h-4 w-4" />
               <span className="text-sm font-medium">Back</span>
             </button>
@@ -1173,29 +1280,21 @@ export default function BuilderPage() {
           </div>
           {isMobile && (
             <div className="flex items-center gap-2">
-              <Button 
-                variant={leftPanelOpen ? "secondary" : "ghost"} 
-                size="icon" 
+              <Button
+                variant={leftPanelOpen ? "secondary" : "ghost"}
+                size="icon"
                 onClick={toggleLeftPanel}
                 className="relative"
               >
-                {leftPanelOpen ? (
-                  <PanelLeftClose className="h-5 w-5" />
-                ) : (
-                  <PanelLeftOpen className="h-5 w-5" />
-                )}
+                {leftPanelOpen ? <PanelLeftClose className="h-5 w-5" /> : <PanelLeftOpen className="h-5 w-5" />}
               </Button>
-              <Button 
-                variant={rightPanelOpen ? "secondary" : "ghost"} 
-                size="icon" 
+              <Button
+                variant={rightPanelOpen ? "secondary" : "ghost"}
+                size="icon"
                 onClick={toggleRightPanel}
                 className="relative"
               >
-                {rightPanelOpen ? (
-                  <PanelRightClose className="h-5 w-5" />
-                ) : (
-                  <PanelRightOpen className="h-5 w-5" />
-                )}
+                {rightPanelOpen ? <PanelRightClose className="h-5 w-5" /> : <PanelRightOpen className="h-5 w-5" />}
               </Button>
             </div>
           )}
@@ -1209,30 +1308,14 @@ export default function BuilderPage() {
                 disabled={!hasUnsavedChanges}
               >
                 <Save className="h-4 w-4" />
-                <span className="hidden sm:inline">
-                  {hasUnsavedChanges ? "Save*" : "Save"}
-                </span>
+                <span className="hidden sm:inline">{hasUnsavedChanges ? "Save*" : "Save"}</span>
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-2"
-                onClick={() => setIsExportDialogOpen(true)}
-              >
+              <Button size="sm" variant="outline" className="gap-2" onClick={() => setIsExportDialogOpen(true)}>
                 <Download className="h-4 w-4" />
                 <span className="hidden sm:inline">Export</span>
               </Button>
-              <Button
-                size="sm"
-                className="gap-2"
-                onClick={handleRunWorkflow}
-                disabled={isRunning}
-              >
-                {isRunning ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Play className="h-4 w-4" />
-                )}
+              <Button size="sm" className="gap-2" onClick={handleRunWorkflow} disabled={isRunning}>
+                {isRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
                 <span className="hidden sm:inline">Run</span>
               </Button>
             </div>
@@ -1242,19 +1325,11 @@ export default function BuilderPage() {
 
       <div className="flex-1 flex overflow-hidden">
         <div
-          className={`${
-            leftPanelOpen ? 'w-64' : 'w-0'
-          } flex-shrink-0 transition-all duration-300 relative md:static ${
-            isMobile && leftPanelOpen ? 'absolute z-50 h-[calc(100vh-3.5rem)]' : ''
+          className={`${leftPanelOpen ? "w-64" : "w-0"} flex-shrink-0 transition-all duration-300 relative md:static ${
+            isMobile && leftPanelOpen ? "absolute z-50 h-[calc(100vh-3.5rem)]" : ""
           }`}
         >
-          {leftPanelOpen && (
-            <LeftPanel
-              onAddNode={addNewNode}
-              nodes={nodes}
-              edges={edges}
-            />
-          )}
+          {leftPanelOpen && <LeftPanel onAddNode={addNewNode} nodes={nodes} edges={edges} />}
         </div>
 
         <div className="flex-1 relative">
@@ -1280,8 +1355,8 @@ export default function BuilderPage() {
               defaultViewport={{ x: 0, y: 0, zoom: 1 }}
             >
               <Background gap={15} size={1} />
-              <Controls 
-                className="bottom-4 right-4" 
+              <Controls
+                className="bottom-4 right-4"
                 showInteractive={false}
                 showZoom={true}
                 showFitView={true}
@@ -1292,10 +1367,8 @@ export default function BuilderPage() {
         </div>
 
         <div
-          className={`${
-            rightPanelOpen ? 'w-80' : 'w-0'
-          } flex-shrink-0 transition-all duration-300 relative md:static ${
-            isMobile && rightPanelOpen ? 'absolute right-0 z-50 h-[calc(100vh-3.5rem)]' : ''
+          className={`${rightPanelOpen ? "w-80" : "w-0"} flex-shrink-0 transition-all duration-300 relative md:static ${
+            isMobile && rightPanelOpen ? "absolute right-0 z-50 h-[calc(100vh-3.5rem)]" : ""
           }`}
         >
           {rightPanelOpen && (
@@ -1319,7 +1392,7 @@ export default function BuilderPage() {
         onClose={(e) => {
           setIsNewWorkflowDialogOpen(false)
           // Only redirect to home if explicitly cancelled and no workflow exists
-          if (!templateLoaded && !nodes.length && e?.type === 'click') {
+          if (!templateLoaded && !nodes.length && e?.type === "click") {
             window.location.href = "/"
           }
         }}
@@ -1329,9 +1402,7 @@ export default function BuilderPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Unsaved Changes</DialogTitle>
-            <DialogDescription>
-              You have unsaved changes. Do you want to save them before leaving?
-            </DialogDescription>
+            <DialogDescription>You have unsaved changes. Do you want to save them before leaving?</DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex gap-2">
             <Button
@@ -1378,9 +1449,7 @@ export default function BuilderPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Additional Information Needed</DialogTitle>
-            <DialogDescription>
-              {infoRequest}
-            </DialogDescription>
+            <DialogDescription>{infoRequest}</DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <Textarea
@@ -1391,9 +1460,7 @@ export default function BuilderPage() {
             />
           </div>
           <DialogFooter>
-            <Button onClick={() => handleInfoSubmit(userInput)}>
-              Submit
-            </Button>
+            <Button onClick={() => handleInfoSubmit(userInput)}>Submit</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1401,9 +1468,7 @@ export default function BuilderPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Input Needed</DialogTitle>
-            <DialogDescription>
-              {inputPrompt}
-            </DialogDescription>
+            <DialogDescription>{inputPrompt}</DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <Textarea
@@ -1415,9 +1480,7 @@ export default function BuilderPage() {
             />
           </div>
           <DialogFooter>
-            <Button onClick={() => handleInputSubmit(currentInput)}>
-              Submit
-            </Button>
+            <Button onClick={() => handleInputSubmit(currentInput)}>Submit</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

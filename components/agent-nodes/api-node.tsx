@@ -9,33 +9,45 @@ export const APINode = memo(({ data, isConnectable }) => {
 
   return (
     <div
-      className={`px-4 py-2 shadow-md rounded-md bg-white border-2 w-48 transition-all duration-300 ${
+      className={`px-4 py-2 shadow-md rounded-md border-2 w-48 transition-all duration-300 ${
         hasError
-          ? "border-red-500 bg-red-50"
+          ? "border-red-500 bg-red-50 dark:bg-red-950/30"
           : isExecuting
-            ? "border-orange-600 bg-orange-50 shadow-lg animate-pulse"
+            ? "border-orange-600 bg-orange-50 dark:bg-orange-950/30 shadow-lg animate-pulse"
             : isCompleted
-              ? "border-green-500 bg-green-50"
-              : "border-orange-500"
+              ? "border-green-500 bg-green-50 dark:bg-green-950/30"
+              : "border-orange-500 bg-white dark:bg-gray-800"
       }`}
     >
       <div className="flex items-center">
         <div
           className={`rounded-full w-8 h-8 flex items-center justify-center transition-colors ${
-            hasError ? "bg-red-100" : isExecuting ? "bg-orange-200" : isCompleted ? "bg-green-100" : "bg-orange-100"
+            hasError
+              ? "bg-red-100 dark:bg-red-900/50"
+              : isExecuting
+                ? "bg-orange-200 dark:bg-orange-900/50"
+                : isCompleted
+                  ? "bg-green-100 dark:bg-green-900/50"
+                  : "bg-orange-100 dark:bg-orange-900/50"
           }`}
         >
           {isExecuting ? (
-            <Loader2 className="w-4 h-4 text-orange-600 animate-spin" />
+            <Loader2 className="w-4 h-4 text-orange-600 dark:text-orange-400 animate-spin" />
           ) : (
             <Globe
-              className={`w-4 h-4 ${hasError ? "text-red-500" : isCompleted ? "text-green-500" : "text-orange-500"}`}
+              className={`w-4 h-4 ${
+                hasError
+                  ? "text-red-500 dark:text-red-400"
+                  : isCompleted
+                    ? "text-green-500 dark:text-green-400"
+                    : "text-orange-500 dark:text-orange-400"
+              }`}
             />
           )}
         </div>
         <div className="ml-2">
-          <div className="text-sm font-bold">{data.label}</div>
-          <div className="text-xs text-gray-500">API Call</div>
+          <div className="text-sm font-bold text-gray-800 dark:text-gray-200">{data.label}</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">API Call</div>
         </div>
       </div>
       {data.apiEndpoint && (
