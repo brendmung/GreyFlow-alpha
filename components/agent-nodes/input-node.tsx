@@ -33,6 +33,15 @@ export const InputNode = memo(({ data, isConnectable }: InputNodeProps) => {
               : "border-blue-500"
       }`}
     >
+      <Handle
+        type="target"
+        position={Position.Top}
+        id="in"
+        isConnectable={isConnectable}
+        className={`w-3 h-3 transition-colors ${
+          hasError ? "bg-red-500" : isExecuting ? "bg-blue-600" : isCompleted ? "bg-green-500" : "bg-blue-500"
+        }`}
+      />
       <div className="flex items-center">
         <div
           className={`rounded-full w-8 h-8 flex items-center justify-center transition-colors ${

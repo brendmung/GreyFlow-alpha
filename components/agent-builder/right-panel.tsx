@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { X, Play, Trash2, Check, Loader2, Plus, Minus, Copy } from "lucide-react"
+import { X, Play, Trash2, Check, Loader2, Plus, Minus, Copy, CheckCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -53,6 +53,7 @@ export function RightPanel({
   const [selectedTemplate, setSelectedTemplate] = useState("custom")
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [inputPrompt, setInputPrompt] = useState("")
+  const [showCopySuccess, setShowCopySuccess] = useState(false)
 
   useEffect(() => {
     if (selectedNode) {
@@ -166,6 +167,14 @@ export function RightPanel({
       }, 100)
     }
   }
+
+  const handleCopyOutput = useCallback(() => {
+    if (output) {
+      navigator.clipboard.writeText(output)
+      setShowCopySuccess(true)
+      setTimeout(() => setShowCopySuccess(false), 2000)
+    }
+  }, [output])
 
   return (
     <div className="h-full w-full border-l bg-background">
@@ -537,13 +546,42 @@ export function RightPanel({
 
               <div className="relative min-h-[200px] bg-gray-50 dark:bg-gray-900 rounded-md p-4 font-mono text-sm overflow-auto">
                 {output ? (
-                  <div className="whitespace-pre-wrap">
-                    {output.split("\n").map((line, i) => (
-                      <div key={i} className="mb-1">
-                        {line}
+                  <>
+                    <div className="whitespace-pre-wrap">
+                      {output.split("\n").map((line, i) => (
+                        <div key={i} className="mb-1">
+                          {line}
+                        </div>
+                      ))}
+                    </div>
+                    {output.includes("Final Result:") && (
+                      <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                        <div className="flex items-center justify-between">
+                          <div className="font-semibold">Final Result:</div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              const finalResult = output.split("Final Result:")[1].trim()
+                              navigator.clipboard.writeText(finalResult)
+                              setShowCopySuccess(true)
+                              setTimeout(() => setShowCopySuccess(false), 2000)
+                            }}
+                            className="h-8 w-8 p-0"
+                          >
+                            {showCopySuccess ? (
+                              <CheckCheck className="h-4 w-4 text-green-500" />
+                            ) : (
+                              <Copy className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
+                        <div className="mt-2 whitespace-pre-wrap">
+                          {output.split("Final Result:")[1].trim()}
+                        </div>
                       </div>
-                    ))}
-                  </div>
+                    )}
+                  </>
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center text-gray-400">
                     Run the workflow to see output here
