@@ -36,7 +36,7 @@ export function PDFNode({ data, selected, id }: PDFNodeProps) {
     : data.isCompleted
     ? "border-green-500"
     : data.isExecuting
-    ? "border-blue-500"
+    ? "border-blue-600 bg-blue-50 shadow-lg animate-pulse"
     : selected
     ? "border-gray-900 dark:border-gray-100"
     : "border-gray-200 dark:border-gray-800"

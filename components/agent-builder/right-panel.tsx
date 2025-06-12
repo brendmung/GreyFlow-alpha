@@ -547,13 +547,13 @@ export function RightPanel({
               <div className="relative min-h-[200px] bg-gray-50 dark:bg-gray-900 rounded-md p-4 font-mono text-sm overflow-auto">
                 {output ? (
                   <>
-                    <div className="whitespace-pre-wrap">
-                      {output.split("\n").map((line, i) => (
-                        <div key={i} className="mb-1">
-                          {line}
-                        </div>
-                      ))}
-                    </div>
+                  <div className="whitespace-pre-wrap">
+                    {output.split("\n").map((line, i) => (
+                      <div key={i} className="mb-1">
+                        {line}
+                      </div>
+                    ))}
+                  </div>
                     {output.includes("Final Result:") && (
                       <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                         <div className="flex items-center justify-between">
