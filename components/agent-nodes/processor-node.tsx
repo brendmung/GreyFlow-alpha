@@ -13,10 +13,10 @@ export const ProcessorNode = memo(({ data, isConnectable }) => {
         hasError
           ? "border-red-500 bg-red-50 dark:bg-red-950/30"
           : isExecuting
-            ? "border-green-600 bg-green-50 dark:bg-green-950/30 shadow-lg animate-pulse"
+            ? "border-teal-600 bg-teal-50 dark:bg-teal-950/30 shadow-lg animate-pulse"
             : isCompleted
               ? "border-green-500 bg-green-50 dark:bg-green-950/30"
-              : "border-green-500 bg-white dark:bg-gray-800"
+              : "border-teal-500 bg-white dark:bg-gray-800"
       }`}
     >
       <div className="flex items-center">
@@ -25,14 +25,14 @@ export const ProcessorNode = memo(({ data, isConnectable }) => {
             hasError
               ? "bg-red-100 dark:bg-red-900/50"
               : isExecuting
-                ? "bg-green-200 dark:bg-green-900/50"
+                ? "bg-teal-200 dark:bg-teal-900/50"
                 : isCompleted
                   ? "bg-green-100 dark:bg-green-900/50"
-                  : "bg-green-100 dark:bg-green-900/50"
+                  : "bg-teal-100 dark:bg-teal-900/50"
           }`}
         >
           {isExecuting ? (
-            <Loader2 className="w-4 h-4 text-green-600 dark:text-green-400 animate-spin" />
+            <Loader2 className="w-4 h-4 text-teal-600 dark:text-teal-400 animate-spin" />
           ) : (
             <Cpu
               className={`w-4 h-4 ${
@@ -40,7 +40,7 @@ export const ProcessorNode = memo(({ data, isConnectable }) => {
                   ? "text-red-500 dark:text-red-400"
                   : isCompleted
                     ? "text-green-500 dark:text-green-400"
-                    : "text-green-500 dark:text-green-400"
+                    : "text-teal-500 dark:text-teal-400"
               }`}
             />
           )}
@@ -56,7 +56,7 @@ export const ProcessorNode = memo(({ data, isConnectable }) => {
         id="in"
         isConnectable={isConnectable}
         className={`w-3 h-3 transition-colors ${
-          hasError ? "bg-red-500" : isExecuting ? "bg-green-600" : isCompleted ? "bg-green-500" : "bg-green-500"
+          hasError ? "bg-red-500" : isExecuting ? "bg-teal-600" : isCompleted ? "bg-green-500" : "bg-teal-500"
         }`}
       />
       <Handle
@@ -65,7 +65,7 @@ export const ProcessorNode = memo(({ data, isConnectable }) => {
         id="out"
         isConnectable={isConnectable}
         className={`w-3 h-3 transition-colors ${
-          hasError ? "bg-red-500" : isExecuting ? "bg-green-600" : isCompleted ? "bg-green-500" : "bg-green-500"
+          hasError ? "bg-red-500" : isExecuting ? "bg-teal-600" : isCompleted ? "bg-green-500" : "bg-teal-500"
         }`}
       />
     </div>
