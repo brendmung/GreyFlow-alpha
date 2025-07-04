@@ -242,7 +242,7 @@ export default function Home() {
                 {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
               </Button>
             )}
-            <Button variant="outline" size="sm" className="gap-2" onClick={handleImportWorkflow}>
+            <Button variant="outline" size="sm" className="gap-2 bg-transparent" onClick={handleImportWorkflow}>
               <Upload className="h-4 w-4" />
               <span className="hidden sm:inline">Import</span>
             </Button>
@@ -276,7 +276,7 @@ export default function Home() {
                     Start Building <ArrowRight className="h-4 w-4" />
                   </Button>
                 </Link>
-                <Button variant="outline" size="lg" className="gap-2" onClick={handleImportWorkflow}>
+                <Button variant="outline" size="lg" className="gap-2 bg-transparent" onClick={handleImportWorkflow}>
                   <Upload className="h-4 w-4" />
                   Import Workflow
                 </Button>
@@ -358,7 +358,7 @@ export default function Home() {
                   </CardHeader>
                   <CardFooter>
                     <Link href={`/builder?template=${template.template}`} className="w-full">
-                      <Button variant="outline" size="sm" className="w-full">
+                      <Button variant="outline" size="sm" className="w-full bg-transparent">
                         Use Template
                       </Button>
                     </Link>
@@ -451,7 +451,7 @@ export default function Home() {
                     Open Builder <ArrowRight className="h-4 w-4" />
                   </Button>
                 </Link>
-                <Button variant="outline" size="lg" className="gap-2" onClick={handleImportWorkflow}>
+                <Button variant="outline" size="lg" className="gap-2 bg-transparent" onClick={handleImportWorkflow}>
                   <Upload className="h-4 w-4" />
                   Import Workflow
                 </Button>
@@ -511,30 +511,12 @@ export default function Home() {
               <ul className="space-y-2">
                 <li>
                   <a
-                    href="https://github.com/greyflow"
+                    href="https://github.com/brendmung/GreyFlow-alpha"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                   >
                     GitHub
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="https://twitter.com/greyflow"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    Twitter
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="mailto:info@greyflow.ai"
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    Contact
                   </a>
                 </li>
               </ul>
