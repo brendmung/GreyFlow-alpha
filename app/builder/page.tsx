@@ -26,7 +26,7 @@ import {
   ArrowLeft,
   Download,
   Play,
-  Loader2,
+  Square,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
@@ -581,6 +581,7 @@ export default function BuilderPage() {
   const [inputPrompt, setInputPrompt] = useState("")
   const [inputResolver, setInputResolver] = useState<((value: string) => void) | null>(null)
   const [currentInput, setCurrentInput] = useState("")
+  const [workflowAbortController, setWorkflowAbortController] = useState<AbortController | null>(null)
 
   // Track changes
   useEffect(() => {
@@ -621,6 +622,38 @@ export default function BuilderPage() {
       window.location.href = href
     }
   }
+
+  // Stop workflow execution
+  const stopWorkflow = useCallback(() => {
+    if (workflowAbortController) {
+      workflowAbortController.abort()
+      setWorkflowAbortController(null)
+    }
+
+    // Close any open dialogs
+    setIsInfoDialogOpen(false)
+    setIsInputDialogOpen(false)
+
+    // Clear resolvers to prevent hanging promises
+    if (infoResolver) {
+      infoResolver("")
+      setInfoResolver(null)
+    }
+    if (inputResolver) {
+      inputResolver("")
+      setInputResolver(null)
+    }
+
+    // Reset execution state
+    setIsRunning(false)
+    resetNodeStatuses()
+
+    toast({
+      title: "Workflow stopped",
+      description: "The workflow execution has been cancelled.",
+      variant: "destructive",
+    })
+  }, [workflowAbortController, infoResolver, inputResolver, toast])
 
   const createNewWorkflow = useCallback(
     (name: string) => {
@@ -730,9 +763,6 @@ export default function BuilderPage() {
       const workflowId = currentWorkflowId || `workflow-${Date.now()}`
 
       // Save to workflows storage
-      // Replace this broken line:
-      // const existingWorkflows = JSON.parse(localStorage.getItem("greyflow_workflows\") || \"{}\"))
-      // With this corrected line:
       const existingWorkflows = JSON.parse(localStorage.getItem("greyflow_workflows") || "{}")
       existingWorkflows[workflowId] = workflow
       localStorage.setItem("greyflow_workflows", JSON.stringify(existingWorkflows))
@@ -996,6 +1026,10 @@ export default function BuilderPage() {
       setIsRunning(true)
       setOutput("")
 
+      // Create abort controller for this workflow execution
+      const abortController = new AbortController()
+      setWorkflowAbortController(abortController)
+
       const workflowData: AgentGraph = {
         nodes: nodes.map((node) => ({
           id: node.id,
@@ -1022,17 +1056,43 @@ export default function BuilderPage() {
       }
 
       const handleNeedInput = async (prompt: string): Promise<string> => {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
+          // Check if workflow was cancelled
+          if (abortController.signal.aborted) {
+            reject(new Error("Workflow cancelled"))
+            return
+          }
+
           setInputPrompt(prompt)
-          setInputResolver(() => resolve)
+          setCurrentInput("") // Clear previous input
+          setInputResolver(() => (value: string) => {
+            if (abortController.signal.aborted) {
+              reject(new Error("Workflow cancelled"))
+            } else {
+              resolve(value)
+            }
+          })
           setIsInputDialogOpen(true)
         })
       }
 
       const handleNeedMoreInfo = async (request: string): Promise<string> => {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
+          // Check if workflow was cancelled
+          if (abortController.signal.aborted) {
+            reject(new Error("Workflow cancelled"))
+            return
+          }
+
           setInfoRequest(request)
-          setInfoResolver(() => resolve)
+          setUserInput("") // Clear previous input
+          setInfoResolver(() => (value: string) => {
+            if (abortController.signal.aborted) {
+              reject(new Error("Workflow cancelled"))
+            } else {
+              resolve(value)
+            }
+          })
           setIsInfoDialogOpen(true)
         })
       }
@@ -1064,16 +1124,21 @@ export default function BuilderPage() {
         handleNeedInput,
       )
 
-      setOutput((prev) => prev + "\nFinal Result: " + result)
+      if (!abortController.signal.aborted) {
+        setOutput((prev) => prev + "\nFinal Result: " + result)
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error occurred"
-      toast({
-        title: "Workflow execution failed",
-        description: errorMessage,
-        variant: "destructive",
-      })
+      if (errorMessage !== "Workflow cancelled") {
+        toast({
+          title: "Workflow execution failed",
+          description: errorMessage,
+          variant: "destructive",
+        })
+      }
     } finally {
       setIsRunning(false)
+      setWorkflowAbortController(null)
     }
   }, [nodes, edges, setNodes, toast])
 
@@ -1083,6 +1148,8 @@ export default function BuilderPage() {
         infoResolver(additionalInfo)
         setInfoResolver(null)
         setIsInfoDialogOpen(false)
+        setInfoRequest("")
+        setUserInput("") // Clear after submission
       }
     },
     [infoResolver],
@@ -1094,11 +1161,35 @@ export default function BuilderPage() {
         inputResolver(input)
         setInputResolver(null)
         setIsInputDialogOpen(false)
-        setCurrentInput("")
+        setCurrentInput("") // Clear after submission
+        setInputPrompt("")
       }
     },
     [inputResolver],
   )
+
+  // Handle dialog cancellation
+  const handleInfoCancel = useCallback(() => {
+    if (infoResolver) {
+      infoResolver("")
+      setInfoResolver(null)
+    }
+    setIsInfoDialogOpen(false)
+    setInfoRequest("")
+    setUserInput("") // Clear on cancel
+    stopWorkflow()
+  }, [infoResolver, stopWorkflow])
+
+  const handleInputCancel = useCallback(() => {
+    if (inputResolver) {
+      inputResolver("")
+      setInputResolver(null)
+    }
+    setIsInputDialogOpen(false)
+    setCurrentInput("") // Clear on cancel
+    setInputPrompt("")
+    stopWorkflow()
+  }, [inputResolver, stopWorkflow])
 
   const handleLeftResize = useCallback(
     (e: React.MouseEvent) => {
@@ -1237,13 +1328,18 @@ export default function BuilderPage() {
         event.preventDefault()
         deleteEdge(selectedEdge.id)
       }
+      // Stop workflow with Escape key
+      if (event.key === "Escape" && isRunning) {
+        event.preventDefault()
+        stopWorkflow()
+      }
     }
 
     window.addEventListener("keydown", handleKeyDown)
     return () => {
       window.removeEventListener("keydown", handleKeyDown)
     }
-  }, [selectedNode, selectedEdge, deleteNode, deleteEdge])
+  }, [selectedNode, selectedEdge, deleteNode, deleteEdge, isRunning, stopWorkflow])
 
   // Panel toggle functions
   const toggleLeftPanel = useCallback(() => {
@@ -1303,21 +1399,33 @@ export default function BuilderPage() {
               <Button
                 size="sm"
                 variant="outline"
-                className="gap-2"
+                className="gap-2 bg-transparent"
                 onClick={saveWorkflow}
                 disabled={!hasUnsavedChanges}
               >
                 <Save className="h-4 w-4" />
                 <span className="hidden sm:inline">{hasUnsavedChanges ? "Save*" : "Save"}</span>
               </Button>
-              <Button size="sm" variant="outline" className="gap-2" onClick={() => setIsExportDialogOpen(true)}>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-2 bg-transparent"
+                onClick={() => setIsExportDialogOpen(true)}
+              >
                 <Download className="h-4 w-4" />
                 <span className="hidden sm:inline">Export</span>
               </Button>
-              <Button size="sm" className="gap-2" onClick={handleRunWorkflow} disabled={isRunning}>
-                {isRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                <span className="hidden sm:inline">Run</span>
-              </Button>
+              {isRunning ? (
+                <Button size="sm" variant="destructive" className="gap-2" onClick={stopWorkflow}>
+                  <Square className="h-4 w-4" />
+                  <span className="hidden sm:inline">Stop</span>
+                </Button>
+              ) : (
+                <Button size="sm" className="gap-2" onClick={handleRunWorkflow}>
+                  <Play className="h-4 w-4" />
+                  <span className="hidden sm:inline">Run</span>
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -1445,7 +1553,15 @@ export default function BuilderPage() {
         onExport={exportWorkflow}
         defaultName={workflowName}
       />
-      <Dialog open={isInfoDialogOpen} onOpenChange={(open) => !open && setIsInfoDialogOpen(false)}>
+      {/* Info Dialog with proper cancellation handling */}
+      <Dialog
+        open={isInfoDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            handleInfoCancel()
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Additional Information Needed</DialogTitle>
@@ -1457,14 +1573,28 @@ export default function BuilderPage() {
               placeholder="Enter the requested information..."
               className="min-h-[100px]"
               onChange={(e) => setUserInput(e.target.value)}
+              value={userInput}
             />
           </div>
-          <DialogFooter>
-            <Button onClick={() => handleInfoSubmit(userInput)}>Submit</Button>
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={handleInfoCancel}>
+              Cancel Workflow
+            </Button>
+            <Button onClick={() => handleInfoSubmit(userInput)} disabled={!userInput.trim()}>
+              Submit
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <Dialog open={isInputDialogOpen} onOpenChange={(open) => !open && setIsInputDialogOpen(false)}>
+      {/* Input Dialog with proper cancellation handling */}
+      <Dialog
+        open={isInputDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            handleInputCancel()
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Input Needed</DialogTitle>
@@ -1479,8 +1609,13 @@ export default function BuilderPage() {
               onChange={(e) => setCurrentInput(e.target.value)}
             />
           </div>
-          <DialogFooter>
-            <Button onClick={() => handleInputSubmit(currentInput)}>Submit</Button>
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={handleInputCancel}>
+              Cancel Workflow
+            </Button>
+            <Button onClick={() => handleInputSubmit(currentInput)} disabled={!currentInput.trim()}>
+              Submit
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
