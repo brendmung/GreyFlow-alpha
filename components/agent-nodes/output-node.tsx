@@ -13,10 +13,10 @@ export const OutputNode = memo(({ data, isConnectable }) => {
         hasError
           ? "border-red-500 bg-red-50 dark:bg-red-950/30"
           : isExecuting
-            ? "border-purple-600 bg-purple-50 dark:bg-purple-950/30 shadow-lg animate-pulse"
+            ? "border-indigo-600 bg-indigo-50 dark:bg-indigo-950/30 shadow-lg animate-pulse"
             : isCompleted
               ? "border-green-500 bg-green-50 dark:bg-green-950/30"
-              : "border-purple-500 bg-white dark:bg-gray-800"
+              : "border-indigo-500 bg-white dark:bg-gray-800"
       }`}
     >
       <div className="flex items-center">
@@ -25,14 +25,14 @@ export const OutputNode = memo(({ data, isConnectable }) => {
             hasError
               ? "bg-red-100 dark:bg-red-900/50"
               : isExecuting
-                ? "bg-purple-200 dark:bg-purple-900/50"
+                ? "bg-indigo-200 dark:bg-indigo-900/50"
                 : isCompleted
                   ? "bg-green-100 dark:bg-green-900/50"
-                  : "bg-purple-100 dark:bg-purple-900/50"
+                  : "bg-indigo-100 dark:bg-indigo-900/50"
           }`}
         >
           {isExecuting ? (
-            <Loader2 className="w-4 h-4 text-purple-600 dark:text-purple-400 animate-spin" />
+            <Loader2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400 animate-spin" />
           ) : (
             <MessageSquare
               className={`w-4 h-4 ${
@@ -40,7 +40,7 @@ export const OutputNode = memo(({ data, isConnectable }) => {
                   ? "text-red-500 dark:text-red-400"
                   : isCompleted
                     ? "text-green-500 dark:text-green-400"
-                    : "text-purple-500 dark:text-purple-400"
+                    : "text-indigo-500 dark:text-indigo-400"
               }`}
             />
           )}
@@ -56,7 +56,7 @@ export const OutputNode = memo(({ data, isConnectable }) => {
         id="in"
         isConnectable={isConnectable}
         className={`w-3 h-3 transition-colors ${
-          hasError ? "bg-red-500" : isExecuting ? "bg-purple-600" : isCompleted ? "bg-green-500" : "bg-purple-500"
+          hasError ? "bg-red-500" : isExecuting ? "bg-indigo-600" : isCompleted ? "bg-green-500" : "bg-indigo-500"
         }`}
       />
     </div>
