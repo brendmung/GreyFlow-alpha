@@ -1,6 +1,6 @@
 import { memo } from "react"
 import { Handle, Position } from "reactflow"
-import { FileText, Loader2 } from "lucide-react"
+import { FileText, Loader2, Settings } from "lucide-react"
 
 export const WordNode = memo(({ data, isConnectable }) => {
   const isExecuting = data.isExecuting
@@ -13,10 +13,10 @@ export const WordNode = memo(({ data, isConnectable }) => {
         hasError
           ? "border-red-500 bg-red-50 dark:bg-red-950/30"
           : isExecuting
-            ? "border-orange-600 bg-orange-50 dark:bg-orange-950/30 shadow-lg animate-pulse"
+            ? "border-cyan-600 bg-cyan-50 dark:bg-cyan-950/30 shadow-lg animate-pulse"
             : isCompleted
               ? "border-green-500 bg-green-50 dark:bg-green-950/30"
-              : "border-orange-500 bg-white dark:bg-gray-800"
+              : "border-cyan-500 bg-white dark:bg-gray-800"
       }`}
     >
       <div className="flex items-center">
@@ -25,14 +25,14 @@ export const WordNode = memo(({ data, isConnectable }) => {
             hasError
               ? "bg-red-100 dark:bg-red-900/50"
               : isExecuting
-                ? "bg-orange-200 dark:bg-orange-900/50"
+                ? "bg-cyan-200 dark:bg-cyan-900/50"
                 : isCompleted
                   ? "bg-green-100 dark:bg-green-900/50"
-                  : "bg-orange-100 dark:bg-orange-900/50"
+                  : "bg-cyan-100 dark:bg-cyan-900/50"
           }`}
         >
           {isExecuting ? (
-            <Loader2 className="w-4 h-4 text-orange-600 dark:text-orange-400 animate-spin" />
+            <Loader2 className="w-4 h-4 text-cyan-600 dark:text-cyan-400 animate-spin" />
           ) : (
             <FileText
               className={`w-4 h-4 ${
@@ -40,18 +40,21 @@ export const WordNode = memo(({ data, isConnectable }) => {
                   ? "text-red-500 dark:text-red-400"
                   : isCompleted
                     ? "text-green-500 dark:text-green-400"
-                    : "text-orange-500 dark:text-orange-400"
+                    : "text-cyan-500 dark:text-cyan-400"
               }`}
             />
           )}
         </div>
         <div className="ml-2">
           <div className="text-sm font-bold text-gray-800 dark:text-gray-200">{data.label}</div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">Word Document</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">Word Generator</div>
         </div>
       </div>
       {data.wordConfig?.filename && (
-        <div className="mt-1 text-xs text-gray-400 truncate">{data.wordConfig.filename}</div>
+        <div className="mt-1 flex items-center">
+          <Settings className="w-3 h-3 text-gray-400 mr-1" />
+          <div className="text-xs text-gray-400 truncate">{data.wordConfig.filename}</div>
+        </div>
       )}
       <Handle
         type="target"
@@ -59,7 +62,16 @@ export const WordNode = memo(({ data, isConnectable }) => {
         id="in"
         isConnectable={isConnectable}
         className={`w-3 h-3 transition-colors ${
-          hasError ? "bg-red-500" : isExecuting ? "bg-orange-600" : isCompleted ? "bg-green-500" : "bg-orange-500"
+          hasError ? "bg-red-500" : isExecuting ? "bg-cyan-600" : isCompleted ? "bg-green-500" : "bg-cyan-500"
+        }`}
+      />
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        id="out"
+        isConnectable={isConnectable}
+        className={`w-3 h-3 transition-colors ${
+          hasError ? "bg-red-500" : isExecuting ? "bg-cyan-600" : isCompleted ? "bg-green-500" : "bg-cyan-500"
         }`}
       />
     </div>
