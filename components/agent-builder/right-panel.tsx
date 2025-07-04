@@ -7,8 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Trash2, Play, Settings, Loader2, FileText } from "lucide-react"
 import type { Node } from "reactflow"
-import { MessageSquare, Cpu, Globe } from "lucide-react"
+import { MessageSquare, Cpu, Globe, ChevronDown, Copy, Square } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useEffect, useState } from "react"
 
 interface AgentNodeData {
   label: string
@@ -52,6 +53,7 @@ interface RightPanelProps {
   onRunWorkflow: () => void
   onDeleteNode: (nodeId: string) => void
   isMobile?: boolean
+  stopWorkflow: () => void
 }
 
 export function RightPanel({
@@ -65,27 +67,177 @@ export function RightPanel({
   onRunWorkflow,
   onDeleteNode,
   isMobile = false,
+  stopWorkflow,
 }: RightPanelProps) {
-  const handleNodeUpdate = (field: string, value: any) => {
+  // Local state to manage form values
+  const [localData, setLocalData] = useState<AgentNodeData | null>(null)
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
+  const [copySuccess, setCopySuccess] = useState<string>("")
+
+  interface WorkflowSection {
+    id: string
+    title: string
+    content: string
+    type: "success" | "error" | "info" | "output"
+    metadata?: {
+      timestamp?: string
+      duration?: string
+      nodeType?: string
+    }
+  }
+
+  const parseWorkflowOutput = (output: string): WorkflowSection[] => {
+    const lines = output.split("\n")
+    const sections: WorkflowSection[] = []
+    let currentSection: Partial<WorkflowSection> | null = null
+    let sectionContent: string[] = []
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+
+      // Only detect node result sections (lines with specific emojis that indicate node outputs)
+      if (
+        line.match(/^[✅❌📤]/u) &&
+        (line.includes("Output") || line.includes("Result") || line.includes("Completed") || line.includes("Failed"))
+      ) {
+        // Save previous section if exists
+        if (currentSection) {
+          sections.push({
+            id: currentSection.id || `section-${sections.length}`,
+            title: currentSection.title || "Unknown",
+            content: sectionContent.join("\n").trim(),
+            type: currentSection.type || "info",
+            metadata: currentSection.metadata,
+          })
+        }
+
+        // Start new section
+        const isError = line.includes("❌") || line.includes("Failed") || line.includes("Error")
+        const isSuccess = line.includes("✅") || line.includes("Completed") || line.includes("Success")
+        const isOutput = line.includes("📤") || line.includes("Output")
+
+        currentSection = {
+          id: `section-${sections.length}`,
+          title: line.replace(/^[✅❌📤]\s*/u, "").trim(),
+          type: isError ? "error" : isSuccess ? "success" : isOutput ? "output" : "info",
+          metadata: {
+            timestamp: new Date().toLocaleTimeString(),
+            nodeType: extractNodeType(line),
+          },
+        }
+        sectionContent = []
+      } else if (line.trim()) {
+        // Add content to current section or display as plain text
+        if (currentSection) {
+          sectionContent.push(line)
+        } else {
+          // For non-expandable content, create a simple text section
+          sections.push({
+            id: `text-${sections.length}`,
+            title: "",
+            content: line,
+            type: "info",
+          })
+        }
+      }
+    }
+
+    // Add final section
+    if (currentSection) {
+      sections.push({
+        id: currentSection.id || `section-${sections.length}`,
+        title: currentSection.title || "Unknown",
+        content: sectionContent.join("\n").trim(),
+        type: currentSection.type || "info",
+        metadata: currentSection.metadata,
+      })
+    }
+
+    // If no sections were parsed, create a single section with all content
+    if (sections.length === 0 && output.trim()) {
+      sections.push({
+        id: "section-0",
+        title: "Workflow Output",
+        content: output.trim(),
+        type: "info",
+      })
+    }
+
+    return sections
+  }
+
+  const extractNodeType = (line: string): string => {
+    if (line.includes("Processor")) return "processor"
+    if (line.includes("API")) return "api"
+    if (line.includes("PDF")) return "pdf"
+    if (line.includes("Word")) return "word"
+    if (line.includes("Input")) return "input"
+    if (line.includes("Output")) return "output"
+    return "unknown"
+  }
+
+  const toggleSection = (sectionId: string) => {
+    setExpandedSections((prev) => {
+      const newSet = new Set(prev)
+      if (newSet.has(sectionId)) {
+        newSet.delete(sectionId)
+      } else {
+        newSet.add(sectionId)
+      }
+      return newSet
+    })
+  }
+
+  const copyToClipboard = async (content: string, title: string) => {
+    try {
+      await navigator.clipboard.writeText(content)
+      setCopySuccess(title)
+      setTimeout(() => setCopySuccess(""), 2000)
+    } catch (err) {
+      console.error("Failed to copy:", err)
+    }
+  }
+
+  // const stopWorkflow = () => {
+  //   // This function should be passed from the parent component
+  //   // For now, we'll just call onRunWorkflow to stop
+  //   console.log('Stopping workflow...')
+  // }
+
+  // Update local state when selectedNode changes
+  useEffect(() => {
     if (selectedNode) {
+      setLocalData({ ...selectedNode.data })
+    } else {
+      setLocalData(null)
+    }
+  }, [selectedNode])
+
+  const handleNodeUpdate = (field: string, value: any) => {
+    if (selectedNode && localData) {
+      const newData = { ...localData, [field]: value }
+      setLocalData(newData)
       updateNodeData(selectedNode.id, { [field]: value })
     }
   }
 
   const handleNestedUpdate = (parent: string, field: string, value: any) => {
-    if (selectedNode) {
-      const currentData = selectedNode.data[parent as keyof AgentNodeData] || {}
+    if (selectedNode && localData) {
+      const currentParentData = localData[parent as keyof AgentNodeData] || {}
+      const newParentData = {
+        ...currentParentData,
+        [field]: value,
+      }
+      const newData = { ...localData, [parent]: newParentData }
+      setLocalData(newData)
       updateNodeData(selectedNode.id, {
-        [parent]: {
-          ...currentData,
-          [field]: value,
-        },
+        [parent]: newParentData,
       })
     }
   }
 
   const renderNodeEditor = () => {
-    if (!selectedNode) {
+    if (!selectedNode || !localData) {
       return (
         <div className="p-6 text-center text-muted-foreground">
           <Settings className="h-12 w-12 mx-auto mb-3 opacity-50" />
@@ -93,9 +245,9 @@ export function RightPanel({
           <p className="text-sm">Select a node to edit its properties</p>
         </div>
       )
-  }
+    }
 
-  return (
+    return (
       <div className="space-y-6">
         {/* Header with node type and delete button */}
         <div className="flex items-center justify-between pb-2 border-b">
@@ -103,18 +255,18 @@ export function RightPanel({
             <Badge variant="outline" className="capitalize font-medium">
               {selectedNode.type} Node
             </Badge>
-            {selectedNode.data.isExecuting && (
+            {localData.isExecuting && (
               <Badge variant="secondary" className="text-xs">
                 <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                 Running
               </Badge>
             )}
-            {selectedNode.data.isCompleted && (
+            {localData.isCompleted && (
               <Badge variant="default" className="text-xs bg-green-500">
                 Completed
               </Badge>
             )}
-            {selectedNode.data.hasError && (
+            {localData.hasError && (
               <Badge variant="destructive" className="text-xs">
                 Error
               </Badge>
@@ -123,7 +275,7 @@ export function RightPanel({
           <Button
             size="sm"
             variant="outline"
-            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+            className="text-red-600 hover:text-red-700 hover:bg-red-50 bg-transparent"
             onClick={() => {
               onDeleteNode(selectedNode.id)
               setSelectedNode(null)
@@ -131,38 +283,38 @@ export function RightPanel({
           >
             <Trash2 className="h-4 w-4 mr-1" />
             Delete
-                    </Button>
-                </div>
+          </Button>
+        </div>
 
         {/* Basic Configuration */}
-                <div className="space-y-4">
-                  <div>
+        <div className="space-y-4">
+          <div>
             <Label htmlFor="label" className="text-sm font-medium">
               Node Label
             </Label>
-                    <Input
+            <Input
               id="label"
-              value={selectedNode.data.label}
+              value={localData.label || ""}
               onChange={(e) => handleNodeUpdate("label", e.target.value)}
               placeholder="Enter node name"
               className="mt-1"
-                    />
-                  </div>
+            />
+          </div>
 
           {/* Input Node Configuration */}
-                  {selectedNode.type === "input" && (
+          {selectedNode.type === "input" && (
             <div className="space-y-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
               <h4 className="font-medium text-blue-900 flex items-center gap-2">
                 <MessageSquare className="h-4 w-4" />
                 Input Configuration
               </h4>
-                    <div>
+              <div>
                 <Label htmlFor="prompt" className="text-sm font-medium">
                   User Prompt
                 </Label>
-                      <Textarea
+                <Textarea
                   id="prompt"
-                  value={selectedNode.data.prompt || ""}
+                  value={localData.prompt || ""}
                   onChange={(e) => handleNodeUpdate("prompt", e.target.value)}
                   placeholder="What should this input ask the user?"
                   className="mt-1 min-h-[80px]"
@@ -171,42 +323,44 @@ export function RightPanel({
                   This message will be shown to users when input is needed
                 </p>
               </div>
-                    </div>
-                  )}
+            </div>
+          )}
 
           {/* Processor Node Configuration */}
-                  {selectedNode.type === "processor" && (
+          {selectedNode.type === "processor" && (
             <div className="space-y-4 p-4 bg-green-50 rounded-lg border border-green-200">
               <h4 className="font-medium text-green-900 flex items-center gap-2">
                 <Cpu className="h-4 w-4" />
                 AI Processing Configuration
               </h4>
               <div className="grid grid-cols-1 gap-4">
-                      <div>
+                <div>
                   <Label htmlFor="model" className="text-sm font-medium">
                     AI Model
                   </Label>
-                        <Select
-                    value={selectedNode.data.model || "gpt-4o"}
+                  <Select
+                    value={localData.model || "gpt-4o"}
                     onValueChange={(value) => handleNodeUpdate("model", value)}
                   >
                     <SelectTrigger className="mt-1">
                       <SelectValue placeholder="Select AI model" />
-                          </SelectTrigger>
-                          <SelectContent>
-                      <SelectItem value="gpt-4o">GPT-4o (Recommended)</SelectItem>
-                      <SelectItem value="gpt-4o-mini">GPT-4o Mini (Faster)</SelectItem>
-                      <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo (Budget)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="gpt-4o">GPT-4o</SelectItem>
+                      <SelectItem value="gpt-4.1">GPT-4.1</SelectItem>
+                      <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
+                      <SelectItem value="nova-ai">Nova AI</SelectItem>
+                      <SelectItem value="gemini-2.0-flash">Gemini 2.0 Flash</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
                   <Label htmlFor="systemPrompt" className="text-sm font-medium">
                     System Instructions
                   </Label>
-                        <Textarea
+                  <Textarea
                     id="systemPrompt"
-                    value={selectedNode.data.systemPrompt || ""}
+                    value={localData.systemPrompt || ""}
                     onChange={(e) => handleNodeUpdate("systemPrompt", e.target.value)}
                     placeholder="Define the AI agent's role and behavior..."
                     className="mt-1 min-h-[120px] font-mono text-sm"
@@ -216,73 +370,139 @@ export function RightPanel({
                   </p>
                 </div>
               </div>
-                      </div>
-                  )}
+            </div>
+          )}
 
           {/* API Node Configuration */}
-                  {selectedNode.type === "api" && (
+          {selectedNode.type === "api" && (
             <div className="space-y-4 p-4 bg-orange-50 rounded-lg border border-orange-200">
               <h4 className="font-medium text-orange-900 flex items-center gap-2">
                 <Globe className="h-4 w-4" />
                 API Configuration
               </h4>
               <div className="grid grid-cols-1 gap-4">
-                      <div>
+                <div>
                   <Label htmlFor="apiEndpoint" className="text-sm font-medium">
                     API Endpoint URL
                   </Label>
-                        <Input
+                  <Input
                     id="apiEndpoint"
-                    value={selectedNode.data.apiEndpoint || ""}
+                    value={localData.apiEndpoint || ""}
                     onChange={(e) => handleNodeUpdate("apiEndpoint", e.target.value)}
-                          placeholder="https://api.example.com/endpoint"
+                    placeholder="https://api.example.com/endpoint"
                     className="mt-1 font-mono text-sm"
-                        />
-                      </div>
+                  />
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label htmlFor="method" className="text-sm font-medium">
                       Method
-                        </Label>
+                    </Label>
                     <Select
-                      value={selectedNode.data.apiConfig?.method || "GET"}
+                      value={localData.apiConfig?.method || "GET"}
                       onValueChange={(value) => handleNestedUpdate("apiConfig", "method", value)}
                     >
                       <SelectTrigger className="mt-1">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="GET">GET</SelectItem>
-                            <SelectItem value="POST">POST</SelectItem>
-                            <SelectItem value="PUT">PUT</SelectItem>
-                            <SelectItem value="DELETE">DELETE</SelectItem>
-                            <SelectItem value="PATCH">PATCH</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="GET">GET</SelectItem>
+                        <SelectItem value="POST">POST</SelectItem>
+                        <SelectItem value="PUT">PUT</SelectItem>
+                        <SelectItem value="DELETE">DELETE</SelectItem>
+                        <SelectItem value="PATCH">PATCH</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
                     <Label htmlFor="authType" className="text-sm font-medium">
                       Authentication
                     </Label>
                     <Select
-                      value={selectedNode.data.apiConfig?.authType || "none"}
+                      value={localData.apiConfig?.authType || "none"}
                       onValueChange={(value) => handleNestedUpdate("apiConfig", "authType", value)}
                     >
                       <SelectTrigger className="mt-1">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
                         <SelectItem value="none">None</SelectItem>
-                            <SelectItem value="bearer">Bearer Token</SelectItem>
-                            <SelectItem value="apikey">API Key</SelectItem>
-                            <SelectItem value="basic">Basic Auth</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <SelectItem value="bearer">Bearer Token</SelectItem>
+                        <SelectItem value="apikey">API Key</SelectItem>
+                        <SelectItem value="basic">Basic Auth</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
+
+                {/* Authentication fields */}
+                {localData.apiConfig?.authType === "bearer" && (
+                  <div>
+                    <Label htmlFor="authToken" className="text-sm font-medium">
+                      Bearer Token
+                    </Label>
+                    <Input
+                      id="authToken"
+                      type="password"
+                      value={localData.apiConfig?.authToken || ""}
+                      onChange={(e) => handleNestedUpdate("apiConfig", "authToken", e.target.value)}
+                      placeholder="Enter bearer token"
+                      className="mt-1 font-mono text-sm"
+                    />
+                  </div>
+                )}
+
+                {localData.apiConfig?.authType === "apikey" && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor="authKey" className="text-sm font-medium">
+                        API Key Name
+                      </Label>
+                      <Input
+                        id="authKey"
+                        value={localData.apiConfig?.authKey || ""}
+                        onChange={(e) => handleNestedUpdate("apiConfig", "authKey", e.target.value)}
+                        placeholder="X-API-Key"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="authValue" className="text-sm font-medium">
+                        API Key Value
+                      </Label>
+                      <Input
+                        id="authValue"
+                        type="password"
+                        value={localData.apiConfig?.authValue || ""}
+                        onChange={(e) => handleNestedUpdate("apiConfig", "authValue", e.target.value)}
+                        placeholder="Enter API key"
+                        className="mt-1 font-mono text-sm"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Request Body for POST/PUT/PATCH */}
+                {localData.apiConfig?.method && ["POST", "PUT", "PATCH"].includes(localData.apiConfig.method) && (
+                  <div>
+                    <Label htmlFor="requestBody" className="text-sm font-medium">
+                      Request Body (JSON)
+                    </Label>
+                    <Textarea
+                      id="requestBody"
+                      value={localData.apiConfig?.body || ""}
+                      onChange={(e) => handleNestedUpdate("apiConfig", "body", e.target.value)}
+                      placeholder='{"key": "{{input}}", "data": "value"}'
+                      className="mt-1 min-h-[80px] font-mono text-sm"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Use {"{{input}}"} to insert data from previous nodes
+                    </p>
+                  </div>
+                )}
               </div>
-                          </div>
-                        )}
+            </div>
+          )}
 
           {/* PDF Node Configuration */}
           {selectedNode.type === "pdf" && (
@@ -292,13 +512,13 @@ export function RightPanel({
                 PDF Generation Settings
               </h4>
               <div className="grid grid-cols-1 gap-4">
-                        <div>
+                <div>
                   <Label htmlFor="pdfFilename" className="text-sm font-medium">
                     Output Filename
                   </Label>
-                                <Input
+                  <Input
                     id="pdfFilename"
-                    value={selectedNode.data.pdfConfig?.filename || ""}
+                    value={localData.pdfConfig?.filename || ""}
                     onChange={(e) => handleNestedUpdate("pdfConfig", "filename", e.target.value)}
                     placeholder="document.pdf"
                     className="mt-1"
@@ -309,7 +529,7 @@ export function RightPanel({
                     Document Template
                   </Label>
                   <Select
-                    value={selectedNode.data.pdfConfig?.documentType || "general"}
+                    value={localData.pdfConfig?.documentType || "general"}
                     onValueChange={(value) => handleNestedUpdate("pdfConfig", "documentType", value)}
                   >
                     <SelectTrigger className="mt-1">
@@ -324,10 +544,10 @@ export function RightPanel({
                       <SelectItem value="custom">Custom Format</SelectItem>
                     </SelectContent>
                   </Select>
-                              </div>
-                          </div>
-                        </div>
-                      )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Word Node Configuration */}
           {selectedNode.type === "word" && (
@@ -337,13 +557,13 @@ export function RightPanel({
                 Word Document Settings
               </h4>
               <div className="grid grid-cols-1 gap-4">
-                        <div>
+                <div>
                   <Label htmlFor="wordFilename" className="text-sm font-medium">
                     Output Filename
                   </Label>
                   <Input
                     id="wordFilename"
-                    value={selectedNode.data.wordConfig?.filename || ""}
+                    value={localData.wordConfig?.filename || ""}
                     onChange={(e) => handleNestedUpdate("wordConfig", "filename", e.target.value)}
                     placeholder="document.docx"
                     className="mt-1"
@@ -354,7 +574,7 @@ export function RightPanel({
                     Document Template
                   </Label>
                   <Select
-                    value={selectedNode.data.wordConfig?.documentType || "general"}
+                    value={localData.wordConfig?.documentType || "general"}
                     onValueChange={(value) => handleNestedUpdate("wordConfig", "documentType", value)}
                   >
                     <SelectTrigger className="mt-1">
@@ -371,8 +591,8 @@ export function RightPanel({
                   </Select>
                 </div>
               </div>
-                        </div>
-                      )}
+            </div>
+          )}
         </div>
       </div>
     )
@@ -399,49 +619,98 @@ export function RightPanel({
             </TabsContent>
 
             <TabsContent value="output" className="h-full flex flex-col p-4 m-0">
-              <div className="bg-gray-50 border rounded-lg p-4 flex-1 overflow-auto mb-3">
-                <div className="font-mono text-sm">
-                  {output ? (
-                    <div className="space-y-1">
-                      {output.split("\n").map((line, index) => (
-                        <div key={index} className="flex">
-                          <span className="text-gray-400 mr-3 select-none text-xs">
-                            {String(index + 1).padStart(2, "0")}
-                          </span>
-                          <span
-                            className={
-                              line.includes("Error") || line.includes("Failed")
-                                ? "text-red-600"
-                                : line.includes("Completed") || line.includes("Success")
-                                  ? "text-green-600"
-                                  : line.includes("Starting") || line.includes("Processing")
-                                    ? "text-blue-600"
-                                    : "text-gray-700"
-                            }
+              <div className="flex-1 overflow-auto mb-3 space-y-3">
+                {output ? (
+                  <div className="space-y-3">
+                    {parseWorkflowOutput(output).map((section, index) =>
+                      section.title ? (
+                        // Expandable section for node results
+                        <div key={index} className="border rounded-lg overflow-hidden">
+                          <div
+                            className="flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 cursor-pointer border-b"
+                            onClick={() => toggleSection(section.id)}
                           >
-                            {line || " "}
-                          </span>
+                            <div className="flex items-center gap-2">
+                              <div
+                                className={`w-2 h-2 rounded-full ${
+                                  section.type === "error"
+                                    ? "bg-red-500"
+                                    : section.type === "success"
+                                      ? "bg-green-500"
+                                      : section.type === "info"
+                                        ? "bg-blue-500"
+                                        : "bg-gray-400"
+                                }`}
+                              />
+                              <span className="font-medium text-sm">{section.title}</span>
+                              <Badge variant="outline" className="text-xs">
+                                {section.type}
+                              </Badge>
                             </div>
-                          ))}
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  copyToClipboard(section.content, section.title)
+                                }}
+                                className="h-6 w-6 p-0"
+                              >
+                                <Copy className="h-3 w-3" />
+                              </Button>
+                              <ChevronDown
+                                className={`h-4 w-4 transition-transform ${
+                                  expandedSections.has(section.id) ? "rotate-180" : ""
+                                }`}
+                              />
+                            </div>
+                          </div>
+                          {expandedSections.has(section.id) && (
+                            <div className="p-4 bg-white">
+                              <div className="font-mono text-sm whitespace-pre-wrap break-words">{section.content}</div>
+                              {section.metadata && (
+                                <div className="mt-3 pt-3 border-t text-xs text-gray-500">
+                                  <div className="flex flex-wrap gap-4">
+                                    {section.metadata.timestamp && <span>Time: {section.metadata.timestamp}</span>}
+                                    {section.metadata.duration && <span>Duration: {section.metadata.duration}</span>}
+                                    {section.metadata.nodeType && <span>Type: {section.metadata.nodeType}</span>}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
-                  ) : (
-                    <div className="text-gray-500 italic h-full flex flex-col justify-center items-center">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                        <span>Ready to execute workflow</span>
-                      </div>
-                      <div className="text-xs">Click "Run Workflow" to see execution logs here...</div>
+                      ) : (
+                        // Simple text display for non-expandable content
+                        <div key={index} className="p-2 text-sm text-gray-700 font-mono whitespace-pre-wrap">
+                          {section.content}
+                        </div>
+                      ),
+                    )}
+                  </div>
+                ) : (
+                  <div className="h-full flex flex-col justify-center items-center text-gray-500 italic border rounded-lg p-8">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                      <span>Ready to execute workflow</span>
                     </div>
-                  )}
-                </div>
+                    <div className="text-xs">Click "Run Workflow" to see execution results here...</div>
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-2">
-                <Button className="flex-1" onClick={onRunWorkflow} disabled={isRunning} size="sm">
+                <Button
+                  className="flex-1"
+                  onClick={isRunning ? stopWorkflow : onRunWorkflow}
+                  variant={isRunning ? "destructive" : "default"}
+                  size="sm"
+                >
                   {isRunning ? (
                     <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Executing...
+                      <Square className="h-4 w-4 mr-2" />
+                      Stop Workflow
                     </>
                   ) : (
                     <>
@@ -451,19 +720,13 @@ export function RightPanel({
                   )}
                 </Button>
                 {output && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      navigator.clipboard.writeText(output)
-                    }}
-                  >
-                    Copy Log
+                  <Button variant="outline" size="sm" onClick={() => copyToClipboard(output, "Complete Workflow Log")}>
+                    Copy All
                   </Button>
                 )}
               </div>
             </TabsContent>
-            </div>
+          </div>
         </Tabs>
       </div>
     </div>
