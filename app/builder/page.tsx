@@ -700,7 +700,19 @@ export default function BuilderPage() {
           const workflow = workflows[loadId]
           if (workflow) {
             setWorkflowName(workflow.name)
-            setNodes(workflow.nodes)
+
+            // Reset execution states when loading
+            const cleanNodes = workflow.nodes.map((node: any) => ({
+              ...node,
+              data: {
+                ...node.data,
+                isExecuting: false,
+                isCompleted: false,
+                hasError: false,
+              },
+            }))
+
+            setNodes(cleanNodes)
             setEdges(workflow.edges)
             setCurrentWorkflowId(loadId)
             setTemplateLoaded(true)
@@ -731,7 +743,19 @@ export default function BuilderPage() {
       const workflow = getTemplateWorkflow(template)
       if (workflow) {
         setWorkflowName(workflow.name)
-        setNodes(workflow.nodes)
+
+        // Reset execution states for template nodes
+        const cleanNodes = workflow.nodes.map((node: any) => ({
+          ...node,
+          data: {
+            ...node.data,
+            isExecuting: false,
+            isCompleted: false,
+            hasError: false,
+          },
+        }))
+
+        setNodes(cleanNodes)
         setEdges(workflow.edges)
         setTemplateLoaded(true)
         toast({
