@@ -121,8 +121,19 @@ export interface AgentResponse {
   isComplete?: boolean
 }
 
-export async function callAI(endpoint: string, messages: any[], systemPrompt?: string, model?: string) {
+export async function callAI(
+  endpoint: string,
+  messages: any[],
+  systemPrompt?: string,
+  model?: string,
+  signal?: AbortSignal,
+) {
   try {
+    // Check if already aborted
+    if (signal?.aborted) {
+      throw new Error("Request was cancelled")
+    }
+
     // Prepare messages with system prompt if provided
     const apiMessages = systemPrompt ? [{ role: "system", content: systemPrompt }, ...messages] : messages
 
@@ -141,6 +152,7 @@ export async function callAI(endpoint: string, messages: any[], systemPrompt?: s
         "Content-Type": "application/json",
       },
       body: JSON.stringify(requestPayload),
+      signal, // Pass the abort signal to fetch
     })
 
     console.log("Response status:", response.status, response.statusText)
@@ -211,6 +223,11 @@ export async function callAI(endpoint: string, messages: any[], systemPrompt?: s
     throw new Error(`Unexpected API response format. The API returned: ${JSON.stringify(data)}`)
   } catch (error) {
     console.error("Error calling AI API:", error)
+
+    // Handle abort errors specifically
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("Request was cancelled")
+    }
 
     if (error instanceof Error) {
       // Re-throw with more context if it's a network error
@@ -304,12 +321,16 @@ Required JSON structure:
     return {
       fontSize: 12,
       lineHeight: 1.2,
-      margins: { top: 20, right: 20, bottom: 20, left: 20 },
+      margins: { top: 20, right: 15, bottom: 20, left: 15 },
     }
   }
 }
 
-async function formatContentWithAI(content: string, documentType: string): Promise<FormattedDocument> {
+async function formatContentWithAI(
+  content: string,
+  documentType: string,
+  signal?: AbortSignal,
+): Promise<FormattedDocument> {
   const formattingPrompt = `Format this content for a professional ${documentType} PDF. 
 Return a JSON object with properly structured content.
 
@@ -349,6 +370,7 @@ Return format:
       [{ role: "user", content: formattingPrompt }],
       "You are a professional document formatter. Return only valid JSON with the formatted content structure.",
       "gpt-4o",
+      signal, // Pass the abort signal
     )
 
     const formatted = cleanAndParseJSON(result)
@@ -410,7 +432,13 @@ export async function executeAgent(
   agent: Agent,
   input: string,
   onStep?: (step: string) => void,
+  signal?: AbortSignal,
 ): Promise<AgentResponse> {
+  // Check if cancelled at the start
+  if (signal?.aborted) {
+    throw new Error("Workflow was cancelled")
+  }
+
   if (agent.type === "input") {
     if (!input || input.trim() === "") {
       return {
@@ -462,6 +490,7 @@ export async function executeAgent(
         messages,
         agent.systemPrompt,
         agent.model,
+        signal, // Pass the abort signal
       )
 
       // Add the latest exchange to conversation history
@@ -506,18 +535,31 @@ export async function executeAgent(
     }
   }
 
+  // Rest of the function remains the same for other agent types...
+  // (PDF, Word, API, Output agents don't make long-running AI calls)
+
   if (agent.type === "pdf") {
     onStep?.(`📄 PDF agent processing text to PDF`)
     try {
+      // Check if cancelled before starting
+      if (signal?.aborted) {
+        throw new Error("Workflow was cancelled")
+      }
+
       // Get document type and style
       const documentType = agent.pdfConfig?.documentType || "general"
       const style = getDefaultStyleForType(documentType)
 
       // Format content with AI
       onStep?.(`📝 Analyzing and formatting content...`)
-      const formattedDoc = await formatContentWithAI(input, documentType)
+      const formattedDoc = await formatContentWithAI(input, documentType, signal)
 
-      // Create PDF
+      // Check if cancelled after AI formatting
+      if (signal?.aborted) {
+        throw new Error("Workflow was cancelled")
+      }
+
+      // Create PDF (rest of PDF creation code remains the same)
       const doc = new jsPDF({
         format: style.format,
         orientation: style.orientation,
@@ -545,6 +587,11 @@ export async function executeAgent(
 
       // Process each section
       for (const section of formattedDoc.sections) {
+        // Check if cancelled during PDF generation
+        if (signal?.aborted) {
+          throw new Error("Workflow was cancelled")
+        }
+
         switch (section.type) {
           case "title":
             doc.setFontSize(style.titleFontSize)
@@ -673,18 +720,33 @@ export async function executeAgent(
   if (agent.type === "word") {
     onStep?.(`📄 Word agent processing text to Word document`)
     try {
+      // Check if cancelled before starting
+      if (signal?.aborted) {
+        throw new Error("Workflow was cancelled")
+      }
+
       // Get document type and configuration
       const documentType = agent.wordConfig?.documentType || "general"
 
       // Format content with AI
       onStep?.(`📝 Analyzing and formatting content for Word...`)
-      const formattedDoc = await formatContentWithAI(input, documentType)
+      const formattedDoc = await formatContentWithAI(input, documentType, signal)
+
+      // Check if cancelled after AI formatting
+      if (signal?.aborted) {
+        throw new Error("Workflow was cancelled")
+      }
 
       // Create Word document sections
       const sections = []
 
       // Process each section and convert to Word paragraphs
       for (const section of formattedDoc.sections) {
+        // Check if cancelled during Word generation
+        if (signal?.aborted) {
+          throw new Error("Workflow was cancelled")
+        }
+
         switch (section.type) {
           case "title":
             sections.push(
@@ -884,17 +946,29 @@ async function executeNodeWithRetry(
   onNeedMoreInfo?: (request: string) => Promise<string>,
   onNeedInput?: (prompt: string) => Promise<string>,
   maxRetries = 10,
+  signal?: AbortSignal,
 ): Promise<{ content: string; isComplete: boolean }> {
+  // Check if cancelled at the start
+  if (signal?.aborted) {
+    throw new Error("Workflow was cancelled")
+  }
+
   // Special handling for input agents
   if (node.type === "input") {
-    const result = await executeAgent(node, nodeInput, onStep)
+    const result = await executeAgent(node, nodeInput, onStep, signal)
 
     // If input agent needs input, get it from the user
     if (result.needsInput && onNeedInput) {
       onStep?.(`❓ Node ${node.label || node.id} needs user input`)
       const userInput = await onNeedInput(result.inputPrompt || "Please provide input...")
+
+      // Check if cancelled after getting user input
+      if (signal?.aborted) {
+        throw new Error("Workflow was cancelled")
+      }
+
       // Execute the input agent again with the user's input
-      const finalResult = await executeAgent(node, userInput, onStep)
+      const finalResult = await executeAgent(node, userInput, onStep, signal)
       return { content: finalResult.content, isComplete: true }
     }
 
@@ -906,13 +980,18 @@ async function executeNodeWithRetry(
   let retryCount = 0
 
   while (retryCount < maxRetries) {
+    // Check if cancelled before each retry
+    if (signal?.aborted) {
+      throw new Error("Workflow was cancelled")
+    }
+
     // Prepare input with conversation history
     const inputWithHistory =
       conversationHistory.length > 0
         ? `__CONVERSATION_HISTORY__:${JSON.stringify(conversationHistory)}__NEW_INPUT__:${currentInput}`
         : currentInput
 
-    const result = await executeAgent(node, inputWithHistory, onStep)
+    const result = await executeAgent(node, inputWithHistory, onStep, signal)
 
     // If we have conversation history from the result, use it
     if (result.conversationHistory) {
@@ -923,6 +1002,12 @@ async function executeNodeWithRetry(
     if (result.needsInput && onNeedInput) {
       onStep?.(`❓ Node ${node.label || node.id} needs user input`)
       const userInput = await onNeedInput(result.inputPrompt || "Please provide input...")
+
+      // Check if cancelled after getting user input
+      if (signal?.aborted) {
+        throw new Error("Workflow was cancelled")
+      }
+
       currentInput = userInput
       retryCount++
       continue
@@ -932,6 +1017,12 @@ async function executeNodeWithRetry(
     if (result.needsMoreInfo && onNeedMoreInfo) {
       onStep?.(`❓ Node ${node.label || node.id} needs more information`)
       const additionalInfo = await onNeedMoreInfo(result.infoRequest || "Please provide more information.")
+
+      // Check if cancelled after getting more info
+      if (signal?.aborted) {
+        throw new Error("Workflow was cancelled")
+      }
+
       currentInput = additionalInfo
       retryCount++
       continue
@@ -946,6 +1037,12 @@ async function executeNodeWithRetry(
     onStep?.(`❓ Node ${node.label || node.id} needs more information to complete its task`)
     if (onNeedMoreInfo) {
       const additionalInfo = await onNeedMoreInfo("Please provide any additional information to complete this task.")
+
+      // Check if cancelled after getting more info
+      if (signal?.aborted) {
+        throw new Error("Workflow was cancelled")
+      }
+
       currentInput = additionalInfo
       retryCount++
       continue
@@ -965,8 +1062,14 @@ export async function executeWorkflow(
   onNodeStatusChange?: (nodeId: string, status: "executing" | "completed" | "error") => void,
   onNeedMoreInfo?: (request: string) => Promise<string>,
   onNeedInput?: (prompt: string) => Promise<string>,
+  signal?: AbortSignal,
 ): Promise<string> {
   onStep?.("🚀 Starting workflow execution...")
+
+  // Check if cancelled at the start
+  if (signal?.aborted) {
+    throw new Error("Workflow was cancelled")
+  }
 
   // Validate workflow
   if (graph.nodes.length === 0) {
@@ -995,6 +1098,11 @@ export async function executeWorkflow(
   const maxIterations = graph.nodes.length * 5
 
   while (hasProgress && processed.size < graph.nodes.length && iterations < maxIterations) {
+    // Check if cancelled during execution
+    if (signal?.aborted) {
+      throw new Error("Workflow was cancelled")
+    }
+
     hasProgress = false
     iterations++
 
@@ -1021,7 +1129,7 @@ export async function executeWorkflow(
 
       try {
         // Execute node with retries and conversation management
-        const result = await executeNodeWithRetry(node, nodeInput, onStep, onNeedMoreInfo, onNeedInput)
+        const result = await executeNodeWithRetry(node, nodeInput, onStep, onNeedMoreInfo, onNeedInput, 10, signal)
 
         results.set(node.id, result.content)
         processed.add(node.id)
@@ -1057,27 +1165,32 @@ export async function executeWorkflow(
     const terminalNodes = graph.nodes.filter((node) => !graph.edges.some((edge) => edge.source === node.id))
 
     if (terminalNodes.length > 0) {
-      const finalResult = terminalNodes
-        .map((node) => results.get(node.id))
-        .filter(Boolean)
-        .join("\n\n")
+      const finalResults = terminalNodes
+        .map((node) => {
+          const result = results.get(node.id)
+          return `📤 Output from ${node.label || node.id}:\n${result || "No output"}\n`
+        })
+        .join("\n")
       onStep?.("🎉 Workflow completed successfully!")
-      return finalResult
+      return finalResults
     }
 
     // Fallback to last processed node
-    const allResults = Array.from(results.values())
-    const finalResult = allResults[allResults.length - 1] || "No output generated"
+    const allResults = Array.from(results.entries())
+    const lastResult = allResults[allResults.length - 1]
+    const finalResult = lastResult ? `📤 Final Output:\n${lastResult[1]}` : "No output generated"
     onStep?.("🎉 Workflow completed successfully!")
     return finalResult
   }
 
-  // Combine outputs from all output nodes
-  const finalResult = outputNodes
-    .map((node) => results.get(node.id))
-    .filter(Boolean)
-    .join("\n\n")
+  // Combine outputs from all output nodes with proper formatting
+  const finalResults = outputNodes
+    .map((node) => {
+      const result = results.get(node.id)
+      return `📤 Output from ${node.label || node.id}:\n${result || "No output"}\n`
+    })
+    .join("\n")
 
   onStep?.("🎉 Workflow completed successfully!")
-  return finalResult
+  return finalResults
 }
