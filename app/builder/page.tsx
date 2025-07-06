@@ -1146,6 +1146,7 @@ export default function BuilderPage() {
         },
         handleNeedMoreInfo,
         handleNeedInput,
+        abortController.signal, // Pass the abort signal to the workflow
       )
 
       if (!abortController.signal.aborted) {
